@@ -14,6 +14,19 @@ import { IncidentsController } from './modules/incidents/incidents.controller.js
 import { PrismaIncidentsRepository } from './modules/incidents/incidents.repository.js';
 import { IncidentsService } from './modules/incidents/incidents.service.js';
 import { PrismaUserLookup } from './modules/incidents/user-lookup.js';
+import { RemediationController } from './modules/remediation/remediation.controller.js';
+import { RemediationEngine } from './modules/remediation/remediation-engine.js';
+import {
+  ClearCacheExecutor,
+  FailoverSimulationExecutor,
+  ReconnectDatabaseExecutor,
+  RestartServiceExecutor,
+  RetryOperationExecutor,
+} from './modules/remediation/remediation-actions.js';
+import type {
+  RemediationActionType,
+  RemediationExecutor,
+} from './modules/remediation/remediation.types.js';
 import { PrismaServiceDependenciesRepository } from './modules/services/service-dependencies.repository.js';
 import { ServiceDependencyService } from './modules/services/service-dependencies.service.js';
 import { ServiceDependenciesController } from './modules/services/service-dependencies.controller.js';
@@ -71,6 +84,10 @@ export interface AppContainer {
     engine: EscalationEngine;
     service: IncidentEscalationService;
     controller: IncidentEscalationController;
+  };
+  remediation: {
+    engine: RemediationEngine;
+    controller: RemediationController;
   };
 }
 
@@ -137,6 +154,22 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
   );
   const incidentEscalationController = new IncidentEscalationController(incidentEscalationService);
 
+  const remediationExecutors: Partial<Record<RemediationActionType, RemediationExecutor>> = {
+    RESTART_SERVICE: new RestartServiceExecutor(servicesRepository),
+    RECONNECT_DATABASE: new ReconnectDatabaseExecutor(deps.prisma),
+    CLEAR_CACHE: new ClearCacheExecutor(),
+    RETRY_OPERATION: new RetryOperationExecutor(),
+    FAILOVER_SIMULATION: new FailoverSimulationExecutor(),
+  };
+  const remediationEngine = new RemediationEngine(
+    remediationExecutors,
+    servicesRepository,
+    incidentsService,
+    auditLogger,
+    deps.logger.child({ module: 'remediation' }),
+  );
+  const remediationController = new RemediationController(remediationEngine);
+
   return {
     prisma: deps.prisma,
     logger: deps.logger,
@@ -164,6 +197,10 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
       engine: escalationEngine,
       service: incidentEscalationService,
       controller: incidentEscalationController,
+    },
+    remediation: {
+      engine: remediationEngine,
+      controller: remediationController,
     },
   };
 }
