@@ -14,6 +14,7 @@ export class PrismaServicesRepository implements ServicesRepository {
       where: {
         ...(filter.tier ? { tier: filter.tier } : {}),
         ...(filter.status ? { status: filter.status } : {}),
+        ...(filter.includeArchived ? {} : { archivedAt: null }),
       },
       orderBy: { name: 'asc' },
     });
@@ -47,8 +48,8 @@ export class PrismaServicesRepository implements ServicesRepository {
     return this.prisma.service.update({ where: { id }, data: { status } });
   }
 
-  async delete(id: string): Promise<void> {
-    await this.prisma.service.delete({ where: { id } });
+  archive(id: string): Promise<Service> {
+    return this.prisma.service.update({ where: { id }, data: { archivedAt: new Date() } });
   }
 
   countDependents(id: string): Promise<number> {

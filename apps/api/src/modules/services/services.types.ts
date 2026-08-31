@@ -17,6 +17,8 @@ export interface UpdateServiceInput {
 export interface ListServicesFilter {
   tier?: ServiceTier | undefined;
   status?: ServiceStatus | undefined;
+  /** Archived services are excluded from every list by default — pass true to see them (e.g. an "archived catalog" admin view). */
+  includeArchived?: boolean | undefined;
 }
 
 /**
@@ -32,7 +34,8 @@ export interface ServicesRepository {
   create(input: CreateServiceInput): Promise<Service>;
   update(id: string, input: UpdateServiceInput): Promise<Service>;
   updateStatus(id: string, status: ServiceStatus): Promise<Service>;
-  delete(id: string): Promise<void>;
+  /** Soft-archive, not delete — see the schema note on Service.archivedAt for why. */
+  archive(id: string): Promise<Service>;
   /** Number of OTHER services that declare a dependency on this one. */
   countDependents(id: string): Promise<number>;
   /** Number of incidents against this service that aren't resolved/closed yet. */

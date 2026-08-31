@@ -94,7 +94,16 @@ export class ServicesService {
     return updated;
   }
 
-  async remove(id: string, actorId: string): Promise<void> {
+  /**
+   * Archives, never hard-deletes. A hard `DELETE FROM services` would
+   * cascade away every historical Metric/SlaRecord row through the FK
+   * (see the schema note on `Service.archivedAt`) — exactly the kind of
+   * silent audit-trail loss a bank can't accept. The guards below are
+   * about the *live* topology staying coherent, not about protecting
+   * history: a service still depended on, or still fighting an open
+   * incident, shouldn't quietly vanish from the active catalog either.
+   */
+  async archive(id: string, actorId: string): Promise<void> {
     await this.getById(id);
 
     const [dependents, openIncidents] = await Promise.all([
@@ -102,26 +111,22 @@ export class ServicesService {
       this.repository.countOpenIncidents(id),
     ]);
 
-    // A DB foreign key would also stop this, but with an opaque P2003 error.
-    // Checking here first lets us tell the caller *why*, not just that it
-    // failed — the kind of guard that belongs in the domain layer, not the
-    // database's error message.
     if (dependents > 0) {
       throw new ConflictError(
-        `Cannot delete: ${dependents} service(s) declare a dependency on this service`,
+        `Cannot archive: ${dependents} service(s) declare a dependency on this service`,
       );
     }
     if (openIncidents > 0) {
       throw new ConflictError(
-        `Cannot delete: ${openIncidents} open incident(s) reference this service`,
+        `Cannot archive: ${openIncidents} open incident(s) reference this service`,
       );
     }
 
-    await this.repository.delete(id);
-    this.logger.info({ serviceId: id }, 'Service deleted');
+    await this.repository.archive(id);
+    this.logger.info({ serviceId: id }, 'Service archived');
     await this.auditLogger.record({
       actorId,
-      action: 'service.delete',
+      action: 'service.archive',
       entityType: 'Service',
       entityId: id,
     });

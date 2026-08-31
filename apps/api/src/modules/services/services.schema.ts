@@ -12,6 +12,7 @@ const slugSchema = z
 export const listServicesQuerySchema = z.object({
   tier: z.enum(tierValues).optional(),
   status: z.enum(statusValues).optional(),
+  includeArchived: z.coerce.boolean().optional(),
 });
 
 export const createServiceSchema = z.object({

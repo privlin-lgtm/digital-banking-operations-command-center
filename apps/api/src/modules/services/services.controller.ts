@@ -57,9 +57,9 @@ export class ServicesController {
     res.json({ data });
   };
 
-  remove = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  archive = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const actorId = requireUser(req).id;
-    await this.servicesService.remove(req.params.id, actorId);
+    await this.servicesService.archive(req.params.id, actorId);
     res.status(204).send();
   };
 }

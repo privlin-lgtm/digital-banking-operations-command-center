@@ -18,6 +18,7 @@ export function makeService(overrides: Partial<Service> = {}): Service {
     tier: overrides.tier ?? 'TIER_2',
     ownerTeam: overrides.ownerTeam ?? 'Team',
     status: overrides.status ?? 'UNKNOWN',
+    archivedAt: overrides.archivedAt ?? null,
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
   };
@@ -32,7 +33,7 @@ export function makeService(overrides: Partial<Service> = {}): Service {
 export class FakeServicesRepository implements ServicesRepository {
   private readonly rows = new Map<string, Service>();
 
-  /** Test-only knobs for the delete guard. */
+  /** Test-only knobs for the archive guard. */
   dependentsCount = 0;
   openIncidentsCount = 0;
 
@@ -45,7 +46,8 @@ export class FakeServicesRepository implements ServicesRepository {
     return [...this.rows.values()].filter(
       (service) =>
         (!filter.tier || service.tier === filter.tier) &&
-        (!filter.status || service.status === filter.status),
+        (!filter.status || service.status === filter.status) &&
+        (filter.includeArchived || service.archivedAt === null),
     );
   }
 
@@ -90,8 +92,14 @@ export class FakeServicesRepository implements ServicesRepository {
     return updated;
   }
 
-  async delete(id: string): Promise<void> {
-    this.rows.delete(id);
+  async archive(id: string): Promise<Service> {
+    const existing = this.rows.get(id);
+    if (!existing) {
+      throw new Error(`FakeServicesRepository: "${id}" not found`);
+    }
+    const updated: Service = { ...existing, archivedAt: new Date() };
+    this.rows.set(id, updated);
+    return updated;
   }
 
   async countDependents(): Promise<number> {

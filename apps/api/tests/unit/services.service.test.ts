@@ -124,37 +124,47 @@ describe('ServicesService', () => {
     });
   });
 
-  describe('remove', () => {
-    it('deletes a service with no dependents and no open incidents', async () => {
+  describe('archive', () => {
+    it('archives a service with no dependents and no open incidents, preserving the row', async () => {
       const seeded = repository.seed(makeService());
 
-      await service.remove(seeded.id, 'user-1');
+      await service.archive(seeded.id, 'user-1');
 
-      expect(await repository.findById(seeded.id)).toBeNull();
+      const archived = await repository.findById(seeded.id);
+      expect(archived).not.toBeNull();
+      expect(archived?.archivedAt).not.toBeNull();
       expect(auditLogger.entries[0]).toMatchObject({
-        action: 'service.delete',
+        action: 'service.archive',
         entityId: seeded.id,
       });
     });
 
-    it('refuses to delete a service other services depend on', async () => {
+    it('excludes archived services from findMany by default', async () => {
+      const seeded = repository.seed(makeService());
+      await service.archive(seeded.id, 'user-1');
+
+      expect(await service.list({})).toEqual([]);
+      expect(await service.list({ includeArchived: true })).toHaveLength(1);
+    });
+
+    it('refuses to archive a service other services depend on', async () => {
       const seeded = repository.seed(makeService());
       repository.dependentsCount = 2;
 
-      await expect(service.remove(seeded.id, 'user-1')).rejects.toThrow(ConflictError);
-      expect(await repository.findById(seeded.id)).not.toBeNull();
+      await expect(service.archive(seeded.id, 'user-1')).rejects.toThrow(ConflictError);
+      expect((await repository.findById(seeded.id))?.archivedAt).toBeNull();
     });
 
-    it('refuses to delete a service with open incidents', async () => {
+    it('refuses to archive a service with open incidents', async () => {
       const seeded = repository.seed(makeService());
       repository.openIncidentsCount = 1;
 
-      await expect(service.remove(seeded.id, 'user-1')).rejects.toThrow(ConflictError);
-      expect(await repository.findById(seeded.id)).not.toBeNull();
+      await expect(service.archive(seeded.id, 'user-1')).rejects.toThrow(ConflictError);
+      expect((await repository.findById(seeded.id))?.archivedAt).toBeNull();
     });
 
     it('throws NotFoundError for an unknown id', async () => {
-      await expect(service.remove('missing', 'user-1')).rejects.toThrow(NotFoundError);
+      await expect(service.archive('missing', 'user-1')).rejects.toThrow(NotFoundError);
     });
   });
 });

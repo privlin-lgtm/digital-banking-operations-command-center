@@ -53,9 +53,10 @@ export function createServicesRouter(): Router {
     asyncHandler(services.controller.updateStatus),
   );
 
-  // Deletion is admin-only and, per ServicesService.remove, blocked while
-  // anything still depends on or has an open incident against this service.
-  router.delete('/:id', authorize(UserRole.ADMIN), asyncHandler(services.controller.remove));
+  // Archival (never a hard delete — see the schema note on Service.archivedAt)
+  // is admin-only and, per ServicesService.archive, blocked while anything
+  // still depends on or has an open incident against this service.
+  router.delete('/:id', authorize(UserRole.ADMIN), asyncHandler(services.controller.archive));
 
   router.use('/:id/dependencies', createServiceDependenciesRouter());
   router.use('/:id/metrics', createServiceMetricsRouter());
