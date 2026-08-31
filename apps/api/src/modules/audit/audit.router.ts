@@ -15,6 +15,9 @@ auditRouter.get(
       take: 100,
       include: { actor: { select: { id: true, email: true, name: true } } },
     });
-    res.json({ data: logs });
+    // AuditLog.id is a BigInt (append-only, high-volume table — see the
+    // schema rationale); JSON.stringify throws on bigint, so it has to be
+    // downgraded to a string at this HTTP boundary, same as Metric.id.
+    res.json({ data: logs.map((log) => ({ ...log, id: log.id.toString() })) });
   }),
 );

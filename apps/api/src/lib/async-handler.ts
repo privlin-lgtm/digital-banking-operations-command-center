@@ -1,8 +1,24 @@
-import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import type {
+  NextFunction,
+  ParamsDictionary,
+  Request,
+  RequestHandler,
+  Response,
+} from 'express-serve-static-core';
+import type { ParsedQs } from 'qs';
 
-type AsyncRoute = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
+type AsyncRoute<P, ResBody, ReqBody, ReqQuery> = (
+  req: Request<P, ResBody, ReqBody, ReqQuery>,
+  res: Response<ResBody>,
+  next: NextFunction,
+) => Promise<unknown>;
 
-export function asyncHandler(fn: AsyncRoute): RequestHandler {
+export function asyncHandler<
+  P = ParamsDictionary,
+  ResBody = unknown,
+  ReqBody = unknown,
+  ReqQuery = ParsedQs,
+>(fn: AsyncRoute<P, ResBody, ReqBody, ReqQuery>): RequestHandler<P, ResBody, ReqBody, ReqQuery> {
   return (req, res, next) => {
     void fn(req, res, next).catch(next);
   };

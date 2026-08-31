@@ -1,8 +1,13 @@
 import type {
-  AlertSeverity,
-  AlertStatus,
-  CaseStatus,
-  TransactionStatus,
+  AlertState,
+  DependencyType,
+  IncidentStatus,
+  RcaStatus,
+  RunbookOutcome,
+  ServiceStatus,
+  ServiceTier,
+  Severity,
+  SlaWindow,
   UserRole,
 } from './enums.js';
 
@@ -40,41 +45,84 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface CustomerDto {
+export interface ServiceDto {
   id: string;
-  externalId: string;
-  fullName: string;
-  email: string | null;
-  kycStatus: string;
+  name: string;
+  slug: string;
+  tier: ServiceTier;
+  ownerTeam: string;
+  status: ServiceStatus;
   createdAt: string;
 }
 
-export interface TransactionDto {
+export interface ServiceDependencyDto {
   id: string;
-  reference: string;
-  amount: string;
-  currency: string;
-  status: TransactionStatus;
-  customerId: string;
-  occurredAt: string;
+  serviceId: string;
+  dependsOnServiceId: string;
+  dependencyType: DependencyType;
 }
 
 export interface AlertDto {
   id: string;
-  title: string;
-  severity: AlertSeverity;
-  status: AlertStatus;
-  source: string;
-  transactionId: string | null;
-  assignedToId: string | null;
-  createdAt: string;
+  serviceId: string;
+  incidentId: string | null;
+  ruleName: string;
+  severity: Severity;
+  state: AlertState;
+  firedAt: string;
+  resolvedAt: string | null;
 }
 
-export interface CaseDto {
+export interface IncidentDto {
   id: string;
   title: string;
-  status: CaseStatus;
-  customerId: string | null;
-  assignedToId: string | null;
+  severity: Severity;
+  status: IncidentStatus;
+  primaryServiceId: string;
+  commanderId: string | null;
+  openedAt: string;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+  closedAt: string | null;
+}
+
+export interface RunbookDto {
+  id: string;
+  title: string;
+  slug: string;
+  triggerCondition: string;
+  steps: unknown;
+  version: number;
+  isActive: boolean;
+}
+
+export interface RcaReportDto {
+  id: string;
+  incidentId: string;
+  rootCause: string;
+  contributingFactors: string | null;
+  status: RcaStatus;
+  authoredById: string;
+  reviewedById: string | null;
+  publishedAt: string | null;
+}
+
+export interface SlaRecordDto {
+  id: string;
+  serviceId: string;
+  windowType: SlaWindow;
+  windowStart: string;
+  windowEnd: string;
+  targetPercent: string;
+  actualPercent: string;
+  breached: boolean;
+}
+
+export interface AuditLogDto {
+  id: string;
+  actorId: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
   createdAt: string;
 }

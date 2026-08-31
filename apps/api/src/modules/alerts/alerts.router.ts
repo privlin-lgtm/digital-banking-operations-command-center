@@ -11,11 +11,11 @@ alertsRouter.get(
   '/',
   asyncHandler(async (_req, res) => {
     const alerts = await prisma.alert.findMany({
-      orderBy: { createdAt: 'desc' },
+      orderBy: { firedAt: 'desc' },
       take: 100,
       include: {
-        assignedTo: { select: { id: true, name: true, email: true } },
-        transaction: { select: { id: true, reference: true, amount: true } },
+        service: { select: { id: true, name: true, tier: true } },
+        incident: { select: { id: true, status: true } },
       },
     });
     res.json({ data: alerts });

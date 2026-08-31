@@ -5,20 +5,13 @@ import express, { type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
+import { createV1Router } from './api/v1/router.js';
 import { loadEnv } from './config/env.js';
 import { logger } from './config/logger.js';
 import { metricsMiddleware } from './config/metrics.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFound } from './middleware/not-found.js';
 import { requestId } from './middleware/request-id.js';
-import { alertsRouter } from './modules/alerts/alerts.router.js';
-import { auditRouter } from './modules/audit/audit.router.js';
-import { authRouter } from './modules/auth/auth.router.js';
-import { casesRouter } from './modules/cases/cases.router.js';
-import { customersRouter } from './modules/customers/customers.router.js';
-import { healthRouter } from './modules/health/health.router.js';
-import { transactionsRouter } from './modules/transactions/transactions.router.js';
-import { usersRouter } from './modules/users/users.router.js';
 
 export function createApp() {
   const env = loadEnv();
@@ -27,14 +20,21 @@ export function createApp() {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
 
+  // --- Cross-cutting middleware, in deliberate order --------------------
+  // 1. requestId: every later middleware/handler/log line can correlate to
+  //    one request, including the ones below that run before pino-http.
   app.use(requestId);
+  // 2. metrics: timed around the whole pipeline, including auth/validation
+  //    failures — a 401 or 422 is still a request the RED dashboards must see.
   app.use(metricsMiddleware());
+  // 3. structured request logging, tagged with the same requestId.
   app.use(
     pinoHttp({
       logger,
       genReqId: (req) => (req as Request).requestId ?? 'unknown',
     }),
   );
+  // 4. security headers before anything touches the request body.
   app.use(
     helmet({
       contentSecurityPolicy: env.NODE_ENV === 'production',
@@ -50,6 +50,8 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
+  // 5. rate limiting after parsing is cheap enough, and before it means an
+  //    oversized body could be parsed before ever being counted.
   app.use(
     rateLimit({
       windowMs: 60_000,
@@ -59,15 +61,12 @@ export function createApp() {
     }),
   );
 
-  app.use('/api/v1', healthRouter);
-  app.use('/api/v1/auth', authRouter);
-  app.use('/api/v1/users', usersRouter);
-  app.use('/api/v1/customers', customersRouter);
-  app.use('/api/v1/transactions', transactionsRouter);
-  app.use('/api/v1/alerts', alertsRouter);
-  app.use('/api/v1/cases', casesRouter);
-  app.use('/api/v1/audit-logs', auditRouter);
+  // --- Routes -------------------------------------------------------------
+  // See src/api/v1/router.ts for the versioning strategy this mount point
+  // is built around.
+  app.use('/api/v1', createV1Router());
 
+  // --- Terminal handlers ---------------------------------------------------
   app.use(notFound);
   app.use(errorHandler);
 

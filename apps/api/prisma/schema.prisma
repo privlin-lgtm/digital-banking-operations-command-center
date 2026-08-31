@@ -7,207 +7,459 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
 enum UserRole {
   ADMIN
-  OPERATIONS
-  COMPLIANCE
-  ANALYST
-  READONLY
+  COMMANDER
+  RESPONDER
+  VIEWER
 }
 
-enum AlertSeverity {
-  LOW
-  MEDIUM
-  HIGH
+enum ServiceTier {
+  TIER_1
+  TIER_2
+  TIER_3
+  TIER_4
+}
+
+enum ServiceStatus {
+  HEALTHY
+  DEGRADED
   CRITICAL
+  MAINTENANCE
+  UNKNOWN
 }
 
-enum AlertStatus {
+enum DependencyType {
+  HARD
+  SOFT
+}
+
+enum Severity {
+  SEV1
+  SEV2
+  SEV3
+  SEV4
+}
+
+enum AlertState {
+  FIRING
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum IncidentStatus {
   OPEN
   ACKNOWLEDGED
-  IN_PROGRESS
+  MITIGATED
   RESOLVED
-  DISMISSED
-}
-
-enum CaseStatus {
-  OPEN
-  INVESTIGATING
-  PENDING_REVIEW
   CLOSED
 }
 
-enum TransactionStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  FLAGGED
+enum RcaStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
 }
 
-enum AuditAction {
-  CREATE
-  UPDATE
-  DELETE
-  LOGIN
-  LOGOUT
-  VIEW
+enum RunbookOutcome {
+  SUCCESS
+  FAILURE
+  PARTIAL
 }
+
+enum SlaWindow {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+/// System-generated entries in an incident's narrative feed. Comments are a
+/// separate, user-editable model (see IncidentComment) but are interleaved
+/// with these at read time — see IncidentsService.getTimeline.
+enum TimelineEventType {
+  CREATED
+  SEVERITY_CHANGED
+  ASSIGNED
+  ACKNOWLEDGED
+  MITIGATED
+  RESOLVED
+  REOPENED
+  CLOSED
+  ESCALATED
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   name         String
   passwordHash String
-  role         UserRole @default(READONLY)
-  isActive     Boolean  @default(true)
+  role         UserRole  @default(VIEWER)
+  isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  refreshTokens RefreshToken[]
-  assignedAlerts Alert[]       @relation("AlertAssignee")
-  assignedCases  Case[]        @relation("CaseAssignee")
-  caseNotes      CaseNote[]
-  auditLogs      AuditLog[]
+  commandedIncidents Incident[]              @relation("IncidentCommander")
+  authoredRunbooks   Runbook[]               @relation("RunbookAuthor")
+  executedRunbooks   IncidentRunbook[]       @relation("RunbookExecutor")
+  authoredRcaReports RcaReport[]             @relation("RcaAuthor")
+  reviewedRcaReports RcaReport[]             @relation("RcaReviewer")
+  ownedActions       CorrectiveAction[]      @relation("CorrectiveActionOwner")
+  timelineEvents     IncidentTimelineEvent[] @relation("TimelineEventActor")
+  incidentComments   IncidentComment[]       @relation("IncidentCommentAuthor")
+  auditLogs          AuditLog[]
 
-  @@index([email])
   @@index([role])
+  @@index([isActive])
   @@map("users")
 }
 
-model RefreshToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime @default(now())
+// ---------------------------------------------------------------------------
+// Service catalog & dependency graph
+// ---------------------------------------------------------------------------
 
-  @@index([userId])
-  @@map("refresh_tokens")
+model Service {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  slug      String        @unique
+  tier      ServiceTier   @default(TIER_2)
+  ownerTeam String
+  // Denormalized cache of current status for fast dashboard reads.
+  // Source of truth is the most recent Metric/Alert stream; a background
+  // job (or the ingest path itself) keeps this column in sync — see
+  // "Database Architecture" doc, §Denormalization.
+  status    ServiceStatus @default(UNKNOWN)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  metrics      Metric[]
+  alerts       Alert[]
+  incidents    Incident[]
+  slaRecords   SlaRecord[]
+  dependsOn    ServiceDependency[] @relation("DependentService")
+  dependedOnBy ServiceDependency[] @relation("UpstreamService")
+
+  @@index([tier, status])
+  @@map("services")
 }
 
-model Customer {
-  id         String   @id @default(cuid())
-  externalId String   @unique
-  fullName   String
-  email      String?
-  kycStatus  String   @default("PENDING")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+/// Self-referential many-to-many on Service, modeling the runtime dependency
+/// graph used for blast-radius analysis ("if X goes down, what else is hit").
+model ServiceDependency {
+  id                 String         @id @default(cuid())
+  serviceId          String
+  service            Service        @relation("DependentService", fields: [serviceId], references: [id], onDelete: Cascade)
+  dependsOnServiceId String
+  dependsOnService   Service        @relation("UpstreamService", fields: [dependsOnServiceId], references: [id], onDelete: Cascade)
+  dependencyType     DependencyType @default(HARD)
+  createdAt          DateTime       @default(now())
 
-  accounts     Account[]
-  transactions Transaction[]
-  cases        Case[]
-
-  @@index([fullName])
-  @@map("customers")
+  // NOTE: a CHECK (serviceId <> dependsOnServiceId) constraint is added by
+  // raw SQL in the migration — Prisma's schema DSL has no CHECK syntax.
+  @@unique([serviceId, dependsOnServiceId])
+  @@index([dependsOnServiceId])
+  @@map("service_dependencies")
 }
 
-model Account {
-  id         String   @id @default(cuid())
-  customerId String
-  customer   Customer @relation(fields: [customerId], references: [id])
-  iban       String   @unique
-  currency   String   @default("USD")
-  status     String   @default("ACTIVE")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+// ---------------------------------------------------------------------------
+// Telemetry (durable rollups — Prometheus remains system-of-record for raw
+// high-frequency samples; see Monitoring Architecture)
+// ---------------------------------------------------------------------------
 
-  transactions Transaction[]
+model Metric {
+  // BigInt identity, not cuid: this table is the highest-volume, pure
+  // append-only table in the schema. A sequential integer PK keeps insert
+  // locality and index size far smaller than a UUID/cuid PK would at scale.
+  id         BigInt   @id @default(autoincrement())
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  metricName String
+  value      Float
+  unit       String
+  recordedAt DateTime
 
-  @@index([customerId])
-  @@map("accounts")
+  // Primary access pattern: "this service's this metric, most recent first".
+  @@unique([serviceId, metricName, recordedAt])
+  @@index([serviceId, metricName, recordedAt(sort: Desc)])
+  @@map("metrics")
 }
 
-model Transaction {
-  id          String            @id @default(cuid())
-  reference   String            @unique
-  customerId  String
-  customer    Customer          @relation(fields: [customerId], references: [id])
-  accountId   String?
-  account     Account?          @relation(fields: [accountId], references: [id])
-  amount      Decimal           @db.Decimal(18, 2)
-  currency    String            @default("USD")
-  status      TransactionStatus @default(PENDING)
-  description String?
-  occurredAt  DateTime
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-
-  alerts Alert[]
-
-  @@index([customerId])
-  @@index([status])
-  @@index([occurredAt])
-  @@map("transactions")
-}
+// ---------------------------------------------------------------------------
+// Alerting & incident response
+// ---------------------------------------------------------------------------
 
 model Alert {
-  id            String        @id @default(cuid())
-  title         String
-  description   String?
-  severity      AlertSeverity @default(MEDIUM)
-  status        AlertStatus   @default(OPEN)
-  source        String
-  transactionId String?
-  transaction   Transaction?  @relation(fields: [transactionId], references: [id])
-  assignedToId  String?
-  assignedTo    User?         @relation("AlertAssignee", fields: [assignedToId], references: [id])
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id          String     @id @default(cuid())
+  serviceId   String
+  service     Service    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  // Nullable + many-to-one: several correlated alerts (an "alert storm")
+  // often escalate into a single incident.
+  incidentId  String?
+  incident    Incident?  @relation(fields: [incidentId], references: [id])
+  ruleName    String
+  severity    Severity
+  state       AlertState @default(FIRING)
+  // Alertmanager's dedupe fingerprint for the firing series.
+  fingerprint String
+  firedAt     DateTime   @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime   @default(now())
 
-  @@index([status, severity])
-  @@index([assignedToId])
+  // NOTE: a partial unique index on (serviceId, ruleName) WHERE state =
+  // 'FIRING' is added by raw SQL in the migration, so the same rule can
+  // never have two simultaneously-open alerts for one service — Prisma's
+  // schema DSL has no partial/filtered index syntax.
+  @@index([serviceId, firedAt(sort: Desc)])
+  @@index([incidentId])
+  @@index([state, severity])
   @@map("alerts")
 }
 
-model Case {
-  id           String     @id @default(cuid())
-  title        String
-  description  String?
-  status       CaseStatus @default(OPEN)
-  customerId   String?
-  customer     Customer?  @relation(fields: [customerId], references: [id])
-  assignedToId String?
-  assignedTo   User?      @relation("CaseAssignee", fields: [assignedToId], references: [id])
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+model Incident {
+  id                String         @id @default(cuid())
+  title             String
+  severity          Severity
+  status            IncidentStatus @default(OPEN)
+  primaryServiceId  String
+  primaryService    Service        @relation(fields: [primaryServiceId], references: [id])
+  commanderId       String?
+  commander         User?          @relation("IncidentCommander", fields: [commanderId], references: [id])
+  openedAt          DateTime       @default(now())
+  acknowledgedAt    DateTime?
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+  // Free-text summary captured at resolve() — "what fixed it", distinct
+  // from the full RcaReport's root-cause analysis which is written later
+  // (and, for P1/P2, required before the incident can be closed).
+  resolutionSummary String?
+  // How far up the severity's escalation chain this incident has climbed,
+  // and when that last happened — the state the EscalationEngine reads to
+  // decide whether the *next* sweep should escalate it further.
+  escalationLevel   Int            @default(0)
+  lastEscalatedAt   DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
-  notes CaseNote[]
+  alerts         Alert[]
+  runbookRuns    IncidentRunbook[]
+  rcaReport      RcaReport?
+  timelineEvents IncidentTimelineEvent[]
+  comments       IncidentComment[]
+
+  @@index([status, severity])
+  @@index([primaryServiceId, openedAt(sort: Desc)])
+  @@index([commanderId])
+  @@map("incidents")
+}
+
+/// The system-generated narrative of an incident: one row per meaningful
+/// state change (created, escalated, acknowledged, ...). Immutable by
+/// convention (nothing in the service layer updates or deletes these) —
+/// it's the incident-scoped equivalent of AuditLog, kept separate because
+/// AuditLog is a platform-wide compliance trail across every entity while
+/// this is what an incident-detail screen renders as a timeline.
+model IncidentTimelineEvent {
+  id         String            @id @default(cuid())
+  incidentId String
+  incident   Incident          @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  type       TimelineEventType
+  message    String
+  // Null for system/automated entries (e.g. an escalation the sweep made).
+  actorId    String?
+  actor      User?             @relation("TimelineEventActor", fields: [actorId], references: [id])
+  metadata   Json?
+  createdAt  DateTime          @default(now())
+
+  @@index([incidentId, createdAt])
+  @@map("incident_timeline_events")
+}
+
+/// User-authored discussion on an incident — separate from
+/// IncidentTimelineEvent because comments are edited/owned by a person,
+/// while timeline events are an immutable system record. The two are
+/// merged into one chronological feed at read time, not at the storage
+/// layer.
+model IncidentComment {
+  id         String   @id @default(cuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation("IncidentCommentAuthor", fields: [authorId], references: [id])
+  body       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([incidentId, createdAt])
+  @@map("incident_comments")
+}
+
+// ---------------------------------------------------------------------------
+// Runbooks & their execution history
+// ---------------------------------------------------------------------------
+
+model Runbook {
+  id               String   @id @default(cuid())
+  title            String
+  slug             String   @unique
+  triggerCondition String
+  // Ordered steps consumed atomically by the UI renderer and the
+  // remediation engine alike — read as one document, never queried
+  // piecemeal, which is the legitimate case for JSONB over decomposition.
+  steps            Json
+  // Bumped on every edit. Executions snapshot the version they ran so a
+  // later edit to the runbook never rewrites incident history.
+  version          Int      @default(1)
+  isActive         Boolean  @default(true)
+  createdById      String
+  createdBy        User     @relation("RunbookAuthor", fields: [createdById], references: [id])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  executions IncidentRunbook[]
+
+  @@index([isActive])
+  @@map("runbooks")
+}
+
+/// Join table for the many-to-many between Incident and Runbook, carrying
+/// execution metadata. This table isn't one of the ten named entities, but
+/// a plain M:N join would lose exactly the data an audit needs: which
+/// runbook VERSION ran, who ran it (or that it was automatic), and whether
+/// it worked.
+model IncidentRunbook {
+  id                    String         @id @default(cuid())
+  incidentId            String
+  incident              Incident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  runbookId             String
+  runbook               Runbook        @relation(fields: [runbookId], references: [id])
+  runbookVersion        Int
+  executedById          String?
+  executedBy            User?          @relation("RunbookExecutor", fields: [executedById], references: [id])
+  executedAutomatically Boolean        @default(false)
+  outcome               RunbookOutcome
+  executedAt            DateTime       @default(now())
+
+  @@index([incidentId])
+  @@index([runbookId])
+  @@map("incident_runbooks")
+}
+
+// ---------------------------------------------------------------------------
+// Root cause analysis
+// ---------------------------------------------------------------------------
+
+model RcaReport {
+  id                  String    @id @default(cuid())
+  incidentId          String    @unique
+  incident            Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  rootCause           String
+  contributingFactors String?
+  authoredById        String
+  authoredBy          User      @relation("RcaAuthor", fields: [authoredById], references: [id])
+  // Four-eyes principle: a banking RCA is reviewed by someone other than
+  // its author before it's considered final.
+  reviewedById        String?
+  reviewedBy          User?     @relation("RcaReviewer", fields: [reviewedById], references: [id])
+  status              RcaStatus @default(DRAFT)
+  publishedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  correctiveActions CorrectiveAction[]
 
   @@index([status])
-  @@index([assignedToId])
-  @@map("cases")
+  @@map("rca_reports")
 }
 
-model CaseNote {
-  id        String   @id @default(cuid())
-  caseId    String
-  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
-  authorId  String
-  author    User     @relation(fields: [authorId], references: [id])
-  body      String
-  createdAt DateTime @default(now())
+/// One-to-many child of RcaReport. Splitting corrective actions out of a
+/// JSONB blob (the obvious alternative) is what makes "list every open
+/// corrective action across all RCAs, by owner" a plain indexed query
+/// instead of a JSONB scan across every report.
+model CorrectiveAction {
+  id          String    @id @default(cuid())
+  rcaReportId String
+  rcaReport   RcaReport @relation(fields: [rcaReportId], references: [id], onDelete: Cascade)
+  description String
+  ownerId     String
+  owner       User      @relation("CorrectiveActionOwner", fields: [ownerId], references: [id])
+  dueDate     DateTime?
+  isComplete  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
 
-  @@index([caseId])
-  @@map("case_notes")
+  @@index([rcaReportId])
+  @@index([ownerId, isComplete])
+  @@map("corrective_actions")
 }
+
+// ---------------------------------------------------------------------------
+// SLA / error-budget reporting (materialized rollup, recomputed on schedule)
+// ---------------------------------------------------------------------------
+
+model SlaRecord {
+  id                         String    @id @default(cuid())
+  serviceId                  String
+  service                    Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  windowType                 SlaWindow
+  windowStart                DateTime
+  windowEnd                  DateTime
+  targetPercent              Decimal   @db.Decimal(5, 2)
+  actualPercent              Decimal   @db.Decimal(5, 2)
+  errorBudgetMinutes         Decimal   @db.Decimal(10, 2)
+  errorBudgetConsumedMinutes Decimal   @db.Decimal(10, 2)
+  // Computed by the SlaCalculator service at write time (actualPercent <
+  // targetPercent), not a DB-generated column — kept as a plain column so
+  // it stays queryable/indexable without relying on Postgres GENERATED
+  // ALWAYS AS semantics, which Prisma's client cannot express type-safely.
+  breached                   Boolean   @default(false)
+  calculatedAt               DateTime  @default(now())
+
+  @@unique([serviceId, windowType, windowStart])
+  @@index([serviceId, windowType, windowStart(sort: Desc)])
+  @@index([breached])
+  @@map("sla_records")
+}
+
+// ---------------------------------------------------------------------------
+// Audit trail — append-only, immutable, attributable to a real actor
+// ---------------------------------------------------------------------------
 
 model AuditLog {
-  id         String      @id @default(cuid())
-  actorId    String?
-  actor      User?       @relation(fields: [actorId], references: [id])
-  action     AuditAction
-  entityType String
-  entityId   String?
-  metadata   Json?
-  ipAddress  String?
-  createdAt  DateTime    @default(now())
+  // BigInt identity for the same reason as Metric: this table is written
+  // on every state-changing action platform-wide and is never updated or
+  // deleted, so insert throughput and index compactness matter more than
+  // global ID generation without a DB round trip.
+  id          BigInt   @id @default(autoincrement())
+  // NOT NULL and always a real User row (including a reserved system
+  // service-account user for automated actions) — every audited action in
+  // a banking system must be attributable to someone, never a nullable FK.
+  actorId     String
+  actor       User     @relation(fields: [actorId], references: [id])
+  // Free-text action code (e.g. "incident.resolve", "runbook.execute"),
+  // not an enum: new action types are added by shipping application code,
+  // not by running a schema migration.
+  action      String
+  entityType  String
+  // Intentionally not a foreign key: this is a polymorphic reference
+  // (entityType names the table), and audit rows must outlive the rows
+  // they describe if the source entity is ever purged under a retention
+  // policy. Enforced by application code, not the database.
+  entityId    String?
+  beforeState Json?
+  afterState  Json?
+  ipAddress   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
 
   @@index([entityType, entityId])
-  @@index([actorId])
+  @@index([actorId, createdAt(sort: Desc)])
   @@index([createdAt])
   @@map("audit_logs")
 }

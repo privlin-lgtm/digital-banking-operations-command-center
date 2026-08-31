@@ -1,19 +1,6 @@
-import { Router } from 'express';
-import { prisma } from '../../config/prisma.js';
-import { asyncHandler } from '../../lib/async-handler.js';
-import { authenticate } from '../../middleware/authenticate.js';
-
-export const customersRouter = Router();
-
-customersRouter.use(authenticate);
-
-customersRouter.get(
-  '/',
-  asyncHandler(async (_req, res) => {
-    const customers = await prisma.customer.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
-    res.json({ data: customers });
-  }),
-);
+// Retired: the "Customer" model was removed when the schema was rebuilt
+// around the SRE/production-engineering domain (Service, Incident, Runbook,
+// RCA, SLA...). This file is intentionally unmounted — delete this
+// directory (and cases/, transactions/) once you've confirmed nothing else
+// references it.
+export {};
