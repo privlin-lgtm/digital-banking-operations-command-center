@@ -1,7 +1,12 @@
 import type { RequestHandler } from 'express';
 import client from 'prom-client';
+import { prisma } from './prisma.js';
 
 const register = new client.Registry();
+// Prefixed with the app's own labels, this already covers "Memory usage"
+// and "CPU usage" from the observability requirements — process_cpu_seconds_total,
+// process_resident_memory_bytes, nodejs_heap_size_used_bytes, event loop
+// lag, GC pauses, and more, all for free from prom-client's own collectors.
 client.collectDefaultMetrics({ register, prefix: 'bankops_' });
 
 const httpDuration = new client.Histogram({
@@ -17,6 +22,58 @@ const httpRequests = new client.Counter({
   help: 'Total number of HTTP requests',
   labelNames: ['method', 'route', 'status_code'] as const,
   registers: [register],
+});
+
+// Request rate, error rate, and throughput are all derivable from the
+// counter above via PromQL (rate(), filtered by status_code) rather than
+// tracked as separate metrics — a second counter recording the same
+// events under a different name would just be redundant cardinality.
+// Latency percentiles (p50/p95/p99) come from the histogram via
+// histogram_quantile() at query time; prom-client computes buckets, not
+// percentiles, which is the correct division of labor between the client
+// library and Prometheus/Grafana.
+
+const OPEN_INCIDENT_STATUSES = ['OPEN', 'ACKNOWLEDGED', 'MITIGATED'] as const;
+
+/**
+ * Business metrics computed at scrape time, not maintained incrementally.
+ * prom-client's `collect()` hook runs only when something actually reads
+ * `/metrics` (every 10-15s per prometheus.yml), so this is a handful of
+ * cheap aggregate queries per scrape interval, not per request — the
+ * right trade for a number that changes slowly compared to HTTP traffic.
+ */
+new client.Gauge({
+  name: 'bankops_incidents_open_total',
+  help: 'Currently open incidents by severity (not resolved or closed)',
+  labelNames: ['severity'] as const,
+  registers: [register],
+  async collect() {
+    const rows = await prisma.incident.groupBy({
+      by: ['severity'],
+      where: { status: { in: [...OPEN_INCIDENT_STATUSES] } },
+      _count: { _all: true },
+    });
+    for (const row of rows) {
+      this.set({ severity: row.severity }, row._count._all);
+    }
+  },
+});
+
+new client.Gauge({
+  name: 'bankops_sla_breaches_current',
+  help: 'Services currently breaching their SLA in the most recent monthly window',
+  labelNames: ['service'] as const,
+  registers: [register],
+  async collect() {
+    const windowStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const rows = await prisma.slaRecord.findMany({
+      where: { windowType: 'MONTHLY', windowStart, breached: true },
+      select: { service: { select: { slug: true } } },
+    });
+    for (const row of rows) {
+      this.set({ service: row.service.slug }, 1);
+    }
+  },
 });
 
 export function metricsMiddleware(): RequestHandler {

@@ -161,22 +161,35 @@ npm run docker:dev
 | `npm run db:studio`   | Prisma Studio            |
 | `npm run docker:down` | Stop compose services    |
 
-## API surface (initial)
+## API surface
 
-| Method | Path                   | Auth                   |
-| ------ | ---------------------- | ---------------------- |
-| `GET`  | `/api/v1/health`       | public                 |
-| `GET`  | `/api/v1/health/ready` | public (DB ping)       |
-| `GET`  | `/api/v1/metrics`      | public (scrape target) |
-| `POST` | `/api/v1/auth/login`   | public                 |
-| `POST` | `/api/v1/auth/logout`  | cookie / bearer        |
-| `GET`  | `/api/v1/auth/me`      | cookie / bearer        |
-| `GET`  | `/api/v1/users`        | `ADMIN`                |
-| `GET`  | `/api/v1/customers`    | authenticated          |
-| `GET`  | `/api/v1/transactions` | authenticated          |
-| `GET`  | `/api/v1/alerts`       | authenticated          |
-| `GET`  | `/api/v1/cases`        | authenticated          |
-| `GET`  | `/api/v1/audit-logs`   | authenticated          |
+| Method                  | Path                                                         | Auth                                           |
+| ----------------------- | ------------------------------------------------------------ | ---------------------------------------------- |
+| `GET`                   | `/api/v1/live`                                               | public (liveness)                              |
+| `GET`                   | `/api/v1/ready`                                              | public (readiness, DB ping)                    |
+| `GET`                   | `/api/v1/health`                                             | public (aggregate rollup)                      |
+| `GET`                   | `/api/v1/metrics`                                            | public (Prometheus scrape)                     |
+| `POST`                  | `/api/v1/auth/login`                                         | public                                         |
+| `POST`                  | `/api/v1/auth/logout`                                        | cookie / bearer                                |
+| `GET`                   | `/api/v1/auth/me`                                            | cookie / bearer                                |
+| `GET`                   | `/api/v1/users`                                              | `ADMIN`                                        |
+| `GET/POST/PATCH/DELETE` | `/api/v1/services[/:id]`                                     | authenticated (write: `ADMIN`/`COMMANDER`)     |
+| `GET/POST/DELETE`       | `/api/v1/services/:id/dependencies[/:depId]`                 | authenticated (write: `ADMIN`/`COMMANDER`)     |
+| `GET`                   | `/api/v1/services/:id/dependencies/blast-radius`             | authenticated                                  |
+| `GET/POST`              | `/api/v1/services/:id/metrics`                               | authenticated                                  |
+| `GET`                   | `/api/v1/services/:id/metrics/health`                        | authenticated                                  |
+| `GET/POST`              | `/api/v1/incidents`                                          | authenticated (create: `RESPONDER`+)           |
+| `GET`                   | `/api/v1/incidents/:id`                                      | authenticated                                  |
+| `PATCH`                 | `/api/v1/incidents/:id/severity`                             | `COMMANDER`/`ADMIN`                            |
+| `POST`                  | `/api/v1/incidents/:id/assign`                               | `RESPONDER`+ (self-claim only for `RESPONDER`) |
+| `POST`                  | `/api/v1/incidents/:id/acknowledge`, `/mitigate`, `/resolve` | `RESPONDER`+                                   |
+| `POST`                  | `/api/v1/incidents/:id/close`, `/reopen`                     | `COMMANDER`/`ADMIN`                            |
+| `GET/POST`              | `/api/v1/incidents/:id/comments`                             | authenticated (post: `RESPONDER`+)             |
+| `GET`                   | `/api/v1/incidents/:id/timeline`                             | authenticated                                  |
+| `GET`                   | `/api/v1/incidents/:id/escalation`                           | authenticated (dry-run preview)                |
+| `POST`                  | `/api/v1/incidents/escalations/sweep`                        | `ADMIN`                                        |
+| `GET`                   | `/api/v1/alerts`                                             | authenticated                                  |
+| `GET`                   | `/api/v1/audit-logs`                                         | authenticated                                  |
 
 Access tokens are issued as the `bankops_access` httpOnly cookie and are also returned in the login JSON for non-browser clients.
 
