@@ -3,6 +3,7 @@ import { alertsRouter } from '../../modules/alerts/alerts.router.js';
 import { auditRouter } from '../../modules/audit/audit.router.js';
 import { authRouter } from '../../modules/auth/auth.router.js';
 import { healthRouter } from '../../modules/health/health.router.js';
+import { createIncidentsRouter } from '../../modules/incidents/incidents.router.js';
 import { createServicesRouter } from '../../modules/services/services.router.js';
 import { usersRouter } from '../../modules/users/users.router.js';
 
@@ -35,6 +36,7 @@ export function createV1Router(): Router {
   router.use('/auth', authRouter);
   router.use('/users', usersRouter);
   router.use('/services', createServicesRouter());
+  router.use('/incidents', createIncidentsRouter());
   router.use('/alerts', alertsRouter);
   router.use('/audit-logs', auditRouter);
 

@@ -14,6 +14,11 @@ const envSchema = z.object({
     .string()
     .default('false')
     .transform((value) => value === 'true'),
+  // 0 disables the in-process sweep entirely (tests, or a deployment that
+  // triggers POST /incidents/escalations/sweep from an external scheduler
+  // instead — see IncidentEscalationService.runSweep's scaling note).
+  ESCALATION_SWEEP_INTERVAL_MS: z.coerce.number().int().min(0).default(60_000),
+  SYSTEM_ACTOR_EMAIL: z.string().default('system@bankops.internal'),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { PrismaClient, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
@@ -18,6 +19,20 @@ async function main(): Promise<void> {
   const adminName = process.env.SEED_ADMIN_NAME ?? 'Platform Admin';
 
   const admin = await upsertUser(adminEmail, adminName, UserRole.ADMIN, adminPassword);
+
+  // Reserved service account: the actor on AuditLog rows written by
+  // automated processes (the escalation sweep) that have no human behind
+  // them — see AuditLog's schema note on why actorId is never nullable.
+  // The random password is never shared anywhere; this account is not
+  // meant to be logged into.
+  const systemEmail = process.env.SYSTEM_ACTOR_EMAIL ?? 'system@bankops.internal';
+  await upsertUser(
+    systemEmail,
+    'BankOps Automation',
+    UserRole.ADMIN,
+    randomBytes(24).toString('hex'),
+  );
+
   const commander = await upsertUser(
     'dana.commander@example.net',
     'Dana Cohen',
