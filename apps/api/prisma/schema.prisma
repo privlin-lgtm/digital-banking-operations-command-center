@@ -66,9 +66,21 @@ enum RcaStatus {
 }
 
 enum RunbookOutcome {
+  /// Linked to an incident but not executed yet — the state a "link this
+  /// runbook to the incident" action leaves it in, before anyone records
+  /// how it went.
+  PENDING
   SUCCESS
   FAILURE
   PARTIAL
+}
+
+enum RunbookCategory {
+  DATABASE
+  INFRASTRUCTURE
+  APPLICATION
+  SECURITY
+  MONITORING
 }
 
 enum SlaWindow {
@@ -306,9 +318,10 @@ model IncidentComment {
 // ---------------------------------------------------------------------------
 
 model Runbook {
-  id               String   @id @default(cuid())
+  id               String          @id @default(cuid())
   title            String
-  slug             String   @unique
+  slug             String          @unique
+  category         RunbookCategory @default(INFRASTRUCTURE)
   triggerCondition String
   // Ordered steps consumed atomically by the UI renderer and the
   // remediation engine alike — read as one document, never queried
@@ -316,16 +329,17 @@ model Runbook {
   steps            Json
   // Bumped on every edit. Executions snapshot the version they ran so a
   // later edit to the runbook never rewrites incident history.
-  version          Int      @default(1)
-  isActive         Boolean  @default(true)
+  version          Int             @default(1)
+  isActive         Boolean         @default(true)
   createdById      String
-  createdBy        User     @relation("RunbookAuthor", fields: [createdById], references: [id])
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdBy        User            @relation("RunbookAuthor", fields: [createdById], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   executions IncidentRunbook[]
 
   @@index([isActive])
+  @@index([category])
   @@map("runbooks")
 }
 

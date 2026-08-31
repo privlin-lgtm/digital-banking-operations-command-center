@@ -27,6 +27,10 @@ import type {
   RemediationActionType,
   RemediationExecutor,
 } from './modules/remediation/remediation.types.js';
+import { PrismaIncidentLookup } from './modules/runbooks/incident-lookup.js';
+import { RunbooksController } from './modules/runbooks/runbooks.controller.js';
+import { PrismaRunbooksRepository } from './modules/runbooks/runbooks.repository.js';
+import { RunbooksService } from './modules/runbooks/runbooks.service.js';
 import { PrismaServiceDependenciesRepository } from './modules/services/service-dependencies.repository.js';
 import { ServiceDependencyService } from './modules/services/service-dependencies.service.js';
 import { ServiceDependenciesController } from './modules/services/service-dependencies.controller.js';
@@ -88,6 +92,11 @@ export interface AppContainer {
   remediation: {
     engine: RemediationEngine;
     controller: RemediationController;
+  };
+  runbooks: {
+    repository: PrismaRunbooksRepository;
+    service: RunbooksService;
+    controller: RunbooksController;
   };
 }
 
@@ -170,6 +179,16 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
   );
   const remediationController = new RemediationController(remediationEngine);
 
+  const runbooksRepository = new PrismaRunbooksRepository(deps.prisma);
+  const incidentLookup = new PrismaIncidentLookup(deps.prisma);
+  const runbooksService = new RunbooksService(
+    runbooksRepository,
+    incidentLookup,
+    auditLogger,
+    deps.logger.child({ module: 'runbooks' }),
+  );
+  const runbooksController = new RunbooksController(runbooksService);
+
   return {
     prisma: deps.prisma,
     logger: deps.logger,
@@ -201,6 +220,11 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
     remediation: {
       engine: remediationEngine,
       controller: remediationController,
+    },
+    runbooks: {
+      repository: runbooksRepository,
+      service: runbooksService,
+      controller: runbooksController,
     },
   };
 }
