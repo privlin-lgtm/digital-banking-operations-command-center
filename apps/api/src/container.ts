@@ -8,6 +8,10 @@ import { AlertsController } from './modules/alerts/alerts.controller.js';
 import { PrismaAlertsRepository } from './modules/alerts/alerts.repository.js';
 import { AlertsService } from './modules/alerts/alerts.service.js';
 import { ThresholdEvaluator } from './modules/alerts/threshold-evaluator.js';
+import { FailureSimulatorController } from './modules/failure-simulator/failure-simulator.controller.js';
+import { PrismaFailureSimulationsRepository } from './modules/failure-simulator/failure-simulator.repository.js';
+import { FailureSimulatorService } from './modules/failure-simulator/failure-simulator.service.js';
+import { FailureScenarioGenerator } from './modules/failure-simulator/scenario-generator.js';
 import { EscalationEngine } from './modules/incidents/escalation-engine.js';
 import { PrismaIncidentCommentsRepository } from './modules/incidents/incident-comments.repository.js';
 import { IncidentEscalationController } from './modules/incidents/incident-escalation.controller.js';
@@ -131,6 +135,12 @@ export interface AppContainer {
     repository: PrismaRcaReportsRepository;
     service: RcaService;
     controller: RcaController;
+  };
+  failureSimulator: {
+    repository: PrismaFailureSimulationsRepository;
+    generator: FailureScenarioGenerator;
+    service: FailureSimulatorService;
+    controller: FailureSimulatorController;
   };
 }
 
@@ -268,6 +278,23 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
   );
   const rcaController = new RcaController(rcaService);
 
+  // Reuses servicesRepository / serviceHealthService / alertsService as
+  // narrow ports (ServiceLookup / MetricRecorder / MetricEvaluator) rather
+  // than depending on their full classes — same reasoning as IncidentCreator
+  // above. Wired last since it depends on all three already being built.
+  const failureSimulationsRepository = new PrismaFailureSimulationsRepository(deps.prisma);
+  const failureScenarioGenerator = new FailureScenarioGenerator();
+  const failureSimulatorService = new FailureSimulatorService(
+    failureSimulationsRepository,
+    servicesRepository,
+    serviceHealthService,
+    alertsService,
+    failureScenarioGenerator,
+    auditLogger,
+    deps.logger.child({ module: 'failure-simulator' }),
+  );
+  const failureSimulatorController = new FailureSimulatorController(failureSimulatorService);
+
   return {
     prisma: deps.prisma,
     logger: deps.logger,
@@ -322,6 +349,12 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
       repository: rcaRepository,
       service: rcaService,
       controller: rcaController,
+    },
+    failureSimulator: {
+      repository: failureSimulationsRepository,
+      generator: failureScenarioGenerator,
+      service: failureSimulatorService,
+      controller: failureSimulatorController,
     },
   };
 }

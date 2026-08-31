@@ -56,6 +56,18 @@ enum AlertComparator {
   LESS_THAN
 }
 
+/// Chaos-engineering scenarios the Failure Simulator can inject. Each maps
+/// to a fixed set of synthetic metric names/degradation curves — see
+/// FailureScenarioGenerator, the pure class that owns that mapping.
+enum FailureScenario {
+  DATABASE_OUTAGE
+  NETWORK_LATENCY
+  MEMORY_LEAK
+  CPU_SPIKE
+  SERVICE_DEGRADATION
+  THIRD_PARTY_API_FAILURE
+}
+
 enum IncidentStatus {
   OPEN
   ACKNOWLEDGED
@@ -156,6 +168,7 @@ model User {
   incidentComments   IncidentComment[]       @relation("IncidentCommentAuthor")
   alertRules         AlertRule[]
   auditLogs          AuditLog[]
+  startedSimulations FailureSimulation[]     @relation("FailureSimulationStartedBy")
 
   @@index([role])
   @@index([isActive])
@@ -191,6 +204,7 @@ model Service {
   alertRules   AlertRule[]
   incidents    Incident[]
   slaRecords   SlaRecord[]
+  simulations  FailureSimulation[]
   dependsOn    ServiceDependency[] @relation("DependentService")
   dependedOnBy ServiceDependency[] @relation("UpstreamService")
 
@@ -299,6 +313,30 @@ model AlertRule {
   @@unique([serviceId, metricName])
   @@index([isActive])
   @@map("alert_rules")
+}
+
+/// A running (or finished) chaos-engineering fault injection against one
+/// service. `stoppedAt` null means running — the same "timestamp instead
+/// of a boolean" pattern as Service.archivedAt, for the same reason: it
+/// records *when*, not just *whether*. The simulation tick loop (see
+/// server.ts) advances `tickCount` and feeds synthetic Metric samples
+/// through the normal recording path for every running row, so the
+/// already-built AlertsService reacts to injected faults exactly as it
+/// would to a real one — no separate alert-generation code path here.
+model FailureSimulation {
+  id          String          @id @default(cuid())
+  serviceId   String
+  service     Service         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  scenario    FailureScenario
+  tickCount   Int             @default(0)
+  startedById String
+  startedBy   User            @relation("FailureSimulationStartedBy", fields: [startedById], references: [id])
+  startedAt   DateTime        @default(now())
+  stoppedAt   DateTime?
+
+  @@index([serviceId])
+  @@index([stoppedAt])
+  @@map("failure_simulations")
 }
 
 model Incident {

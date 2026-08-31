@@ -60,6 +60,40 @@ new client.Gauge({
 });
 
 new client.Gauge({
+  name: 'bankops_alerts_firing_total',
+  help: 'Currently firing alerts by severity (FIRING or ACKNOWLEDGED, not yet RESOLVED)',
+  labelNames: ['severity'] as const,
+  registers: [register],
+  async collect() {
+    const rows = await prisma.alert.groupBy({
+      by: ['severity'],
+      where: { state: { in: ['FIRING', 'ACKNOWLEDGED'] } },
+      _count: { _all: true },
+    });
+    for (const row of rows) {
+      this.set({ severity: row.severity }, row._count._all);
+    }
+  },
+});
+
+new client.Gauge({
+  name: 'bankops_failure_simulations_active',
+  help: 'Currently running chaos-engineering fault injections, by scenario',
+  labelNames: ['scenario'] as const,
+  registers: [register],
+  async collect() {
+    const rows = await prisma.failureSimulation.groupBy({
+      by: ['scenario'],
+      where: { stoppedAt: null },
+      _count: { _all: true },
+    });
+    for (const row of rows) {
+      this.set({ scenario: row.scenario }, row._count._all);
+    }
+  },
+});
+
+new client.Gauge({
   name: 'bankops_sla_breaches_current',
   help: 'Services currently breaching their SLA in the most recent monthly window',
   labelNames: ['service'] as const,

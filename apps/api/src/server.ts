@@ -1,10 +1,11 @@
 import 'dotenv/config';
+import type { UserRole } from '@bankops/shared';
 import { createApp } from './app.js';
 import { loadEnv } from './config/env.js';
 import { logger } from './config/logger.js';
 import { prisma } from './config/prisma.js';
 import { getContainer } from './container.js';
-import { resolveSystemActorId } from './modules/incidents/system-actor.js';
+import { resolveSystemActor } from './modules/incidents/system-actor.js';
 
 /**
  * Wires one named recurring job onto an in-process interval, attributing
@@ -20,7 +21,7 @@ function startScheduledJob(
   envVarName: string,
   intervalMs: number,
   systemActorEmail: string,
-  run: (actorId: string) => Promise<unknown>,
+  run: (actor: { id: string; role: UserRole }) => Promise<unknown>,
 ): NodeJS.Timeout | undefined {
   if (intervalMs === 0) {
     logger.info(`${jobName} disabled (${envVarName}=0)`);
@@ -31,8 +32,8 @@ function startScheduledJob(
 
   const timer = setInterval(() => {
     void (async () => {
-      const actorId = await resolveSystemActorId(prisma, systemActorEmail);
-      if (!actorId) {
+      const actor = await resolveSystemActor(prisma, systemActorEmail);
+      if (!actor) {
         jobLogger.warn(
           { systemActorEmail },
           'System actor not found — skipping run (has the seed run?)',
@@ -40,7 +41,7 @@ function startScheduledJob(
         return;
       }
       try {
-        await run(actorId);
+        await run(actor);
       } catch (error) {
         jobLogger.error({ err: error }, `${jobName} failed`);
       }
@@ -67,7 +68,7 @@ async function main(): Promise<void> {
   logger.info('Database connection verified');
 
   const app = createApp();
-  const { incidentEscalation, sla } = getContainer();
+  const { incidentEscalation, sla, failureSimulator } = getContainer();
 
   const server = app.listen(env.API_PORT, env.API_HOST, () => {
     logger.info({ host: env.API_HOST, port: env.API_PORT }, 'BankOps API listening');
@@ -79,14 +80,21 @@ async function main(): Promise<void> {
       'ESCALATION_SWEEP_INTERVAL_MS',
       env.ESCALATION_SWEEP_INTERVAL_MS,
       env.SYSTEM_ACTOR_EMAIL,
-      (actorId) => incidentEscalation.service.runSweep(actorId),
+      (actor) => incidentEscalation.service.runSweep(actor.id),
     ),
     startScheduledJob(
       'sla-rollup',
       'SLA_ROLLUP_INTERVAL_MS',
       env.SLA_ROLLUP_INTERVAL_MS,
       env.SYSTEM_ACTOR_EMAIL,
-      (actorId) => sla.service.runRollup(actorId),
+      (actor) => sla.service.runRollup(actor.id),
+    ),
+    startScheduledJob(
+      'failure-simulator-tick',
+      'FAILURE_SIMULATOR_TICK_INTERVAL_MS',
+      env.FAILURE_SIMULATOR_TICK_INTERVAL_MS,
+      env.SYSTEM_ACTOR_EMAIL,
+      (actor) => failureSimulator.service.tick(actor.id, actor.role),
     ),
   ].filter((timer): timer is NodeJS.Timeout => timer !== undefined);
 

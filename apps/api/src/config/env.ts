@@ -22,6 +22,10 @@ const envSchema = z.object({
   // disable-for-external-scheduler reasoning as the escalation sweep, and
   // the same interval semantics — see SlaTrackingService.runRollup.
   SLA_ROLLUP_INTERVAL_MS: z.coerce.number().int().min(0).default(3_600_000),
+  // Drives every currently-running FailureSimulation forward one tick —
+  // short by design, since a chaos-engineering demo scenario should show
+  // its metrics degrading in observable real time, not once an hour.
+  FAILURE_SIMULATOR_TICK_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
   SYSTEM_ACTOR_EMAIL: z.string().default('system@bankops.internal'),
 });
 
