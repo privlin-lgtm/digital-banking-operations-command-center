@@ -27,6 +27,12 @@ import type {
   RemediationActionType,
   RemediationExecutor,
 } from './modules/remediation/remediation.types.js';
+import { PrismaIncidentContextReader } from './modules/rca/incident-context-reader.js';
+import { PrismaIncidentLookup as RcaPrismaIncidentLookup } from './modules/rca/incident-lookup.js';
+import { RcaReportGenerator } from './modules/rca/rca-report-generator.js';
+import { PrismaRcaReportsRepository } from './modules/rca/rca.repository.js';
+import { RcaController } from './modules/rca/rca.controller.js';
+import { RcaService } from './modules/rca/rca.service.js';
 import { PrismaIncidentLookup } from './modules/runbooks/incident-lookup.js';
 import { RunbooksController } from './modules/runbooks/runbooks.controller.js';
 import { PrismaRunbooksRepository } from './modules/runbooks/runbooks.repository.js';
@@ -108,6 +114,11 @@ export interface AppContainer {
     recordsRepository: PrismaSlaRecordsRepository;
     service: SlaTrackingService;
     controller: SlaController;
+  };
+  rca: {
+    repository: PrismaRcaReportsRepository;
+    service: RcaService;
+    controller: RcaController;
   };
 }
 
@@ -213,6 +224,20 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
   );
   const slaController = new SlaController(slaTrackingService);
 
+  const rcaRepository = new PrismaRcaReportsRepository(deps.prisma);
+  const rcaIncidentLookup = new RcaPrismaIncidentLookup(deps.prisma);
+  const rcaContextReader = new PrismaIncidentContextReader(deps.prisma);
+  const rcaReportGenerator = new RcaReportGenerator();
+  const rcaService = new RcaService(
+    rcaRepository,
+    rcaIncidentLookup,
+    rcaContextReader,
+    rcaReportGenerator,
+    auditLogger,
+    deps.logger.child({ module: 'rca' }),
+  );
+  const rcaController = new RcaController(rcaService);
+
   return {
     prisma: deps.prisma,
     logger: deps.logger,
@@ -255,6 +280,11 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
       recordsRepository: slaRecordsRepository,
       service: slaTrackingService,
       controller: slaController,
+    },
+    rca: {
+      repository: rcaRepository,
+      service: rcaService,
+      controller: rcaController,
     },
   };
 }

@@ -89,6 +89,28 @@ enum SlaWindow {
   MONTHLY
 }
 
+/// The classic incident-postmortem taxonomy — broad enough to categorize
+/// almost any root cause without needing a free-text field for the axis
+/// a dashboard actually wants to group and count by.
+enum RcaRootCauseCategory {
+  HUMAN_ERROR
+  CONFIGURATION_CHANGE
+  CODE_DEFECT
+  INFRASTRUCTURE_FAILURE
+  THIRD_PARTY_DEPENDENCY
+  CAPACITY_LIMIT
+  PROCESS_GAP
+}
+
+/// Corrective = fixes this occurrence. Preventive = stops it recurring.
+/// The same CorrectiveAction table holds both — they share every other
+/// field (description, owner, due date, completion) and only differ in
+/// intent, which doesn't justify a second table.
+enum CorrectiveActionType {
+  CORRECTIVE
+  PREVENTIVE
+}
+
 /// System-generated entries in an incident's narrative feed. Comments are a
 /// separate, user-editable model (see IncidentComment) but are interleaved
 /// with these at read time — see IncidentsService.getTimeline.
@@ -371,21 +393,22 @@ model IncidentRunbook {
 // ---------------------------------------------------------------------------
 
 model RcaReport {
-  id                  String    @id @default(cuid())
-  incidentId          String    @unique
-  incident            Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  id                  String               @id @default(cuid())
+  incidentId          String               @unique
+  incident            Incident             @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   rootCause           String
+  rootCauseCategory   RcaRootCauseCategory @default(PROCESS_GAP)
   contributingFactors String?
   authoredById        String
-  authoredBy          User      @relation("RcaAuthor", fields: [authoredById], references: [id])
+  authoredBy          User                 @relation("RcaAuthor", fields: [authoredById], references: [id])
   // Four-eyes principle: a banking RCA is reviewed by someone other than
   // its author before it's considered final.
   reviewedById        String?
-  reviewedBy          User?     @relation("RcaReviewer", fields: [reviewedById], references: [id])
-  status              RcaStatus @default(DRAFT)
+  reviewedBy          User?                @relation("RcaReviewer", fields: [reviewedById], references: [id])
+  status              RcaStatus            @default(DRAFT)
   publishedAt         DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   correctiveActions CorrectiveAction[]
 
@@ -398,15 +421,16 @@ model RcaReport {
 /// corrective action across all RCAs, by owner" a plain indexed query
 /// instead of a JSONB scan across every report.
 model CorrectiveAction {
-  id          String    @id @default(cuid())
+  id          String               @id @default(cuid())
   rcaReportId String
-  rcaReport   RcaReport @relation(fields: [rcaReportId], references: [id], onDelete: Cascade)
+  rcaReport   RcaReport            @relation(fields: [rcaReportId], references: [id], onDelete: Cascade)
+  type        CorrectiveActionType @default(CORRECTIVE)
   description String
   ownerId     String
-  owner       User      @relation("CorrectiveActionOwner", fields: [ownerId], references: [id])
+  owner       User                 @relation("CorrectiveActionOwner", fields: [ownerId], references: [id])
   dueDate     DateTime?
-  isComplete  Boolean   @default(false)
-  createdAt   DateTime  @default(now())
+  isComplete  Boolean              @default(false)
+  createdAt   DateTime             @default(now())
 
   @@index([rcaReportId])
   @@index([ownerId, isComplete])
