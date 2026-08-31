@@ -1,0 +1,52 @@
+{
+  "name": "bankops-control-center",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BankOps Control Center — digital banking operations command platform",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:web": "npm run dev -w @bankops/web",
+    "dev:api": "npm run dev -w @bankops/api",
+    "build": "npm run build -w @bankops/shared && npm run build -w @bankops/api && npm run build -w @bankops/web",
+    "start": "npm run start --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:fix": "npm run lint --workspaces --if-present -- --fix",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "npm run db:generate -w @bankops/api",
+    "db:migrate": "npm run db:migrate -w @bankops/api",
+    "db:migrate:dev": "npm run db:migrate:dev -w @bankops/api",
+    "db:seed": "npm run db:seed -w @bankops/api",
+    "db:studio": "npm run db:studio -w @bankops/api",
+    "docker:up": "docker compose up --build",
+    "docker:up:detach": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.34.0",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.5",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.42.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml,css}": "prettier --write"
+  }
+}

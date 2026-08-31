@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPERATIONS
+  COMPLIANCE
+  ANALYST
+  READONLY
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+  DISMISSED
+}
+
+enum CaseStatus {
+  OPEN
+  INVESTIGATING
+  PENDING_REVIEW
+  CLOSED
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  FLAGGED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  VIEW
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         UserRole @default(READONLY)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+  assignedAlerts Alert[]       @relation("AlertAssignee")
+  assignedCases  Case[]        @relation("CaseAssignee")
+  caseNotes      CaseNote[]
+  auditLogs      AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Customer {
+  id         String   @id @default(cuid())
+  externalId String   @unique
+  fullName   String
+  email      String?
+  kycStatus  String   @default("PENDING")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  accounts     Account[]
+  transactions Transaction[]
+  cases        Case[]
+
+  @@index([fullName])
+  @@map("customers")
+}
+
+model Account {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  iban       String   @unique
+  currency   String   @default("USD")
+  status     String   @default("ACTIVE")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@index([customerId])
+  @@map("accounts")
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  reference   String            @unique
+  customerId  String
+  customer    Customer          @relation(fields: [customerId], references: [id])
+  accountId   String?
+  account     Account?          @relation(fields: [accountId], references: [id])
+  amount      Decimal           @db.Decimal(18, 2)
+  currency    String            @default("USD")
+  status      TransactionStatus @default(PENDING)
+  description String?
+  occurredAt  DateTime
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  alerts Alert[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([occurredAt])
+  @@map("transactions")
+}
+
+model Alert {
+  id            String        @id @default(cuid())
+  title         String
+  description   String?
+  severity      AlertSeverity @default(MEDIUM)
+  status        AlertStatus   @default(OPEN)
+  source        String
+  transactionId String?
+  transaction   Transaction?  @relation(fields: [transactionId], references: [id])
+  assignedToId  String?
+  assignedTo    User?         @relation("AlertAssignee", fields: [assignedToId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([status, severity])
+  @@index([assignedToId])
+  @@map("alerts")
+}
+
+model Case {
+  id           String     @id @default(cuid())
+  title        String
+  description  String?
+  status       CaseStatus @default(OPEN)
+  customerId   String?
+  customer     Customer?  @relation(fields: [customerId], references: [id])
+  assignedToId String?
+  assignedTo   User?      @relation("CaseAssignee", fields: [assignedToId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  notes CaseNote[]
+
+  @@index([status])
+  @@index([assignedToId])
+  @@map("cases")
+}
+
+model CaseNote {
+  id        String   @id @default(cuid())
+  caseId    String
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([caseId])
+  @@map("case_notes")
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String?
+  actor      User?       @relation(fields: [actorId], references: [id])
+  action     AuditAction
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
