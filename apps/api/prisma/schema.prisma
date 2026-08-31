@@ -428,6 +428,17 @@ model SlaRecord {
   actualPercent              Decimal   @db.Decimal(5, 2)
   errorBudgetMinutes         Decimal   @db.Decimal(10, 2)
   errorBudgetConsumedMinutes Decimal   @db.Decimal(10, 2)
+  // Response time: average of this service's own latency metric samples
+  // in the window (see Metric). Nullable — a service reporting no
+  // latency metric in the window has no response-time figure, not zero.
+  avgResponseTimeMs          Decimal?  @db.Decimal(10, 2)
+  // Mean Time To Detect: average gap between an alert firing and the
+  // incident it correlated to being created. Nullable — a window with no
+  // incidents has nothing to average.
+  meanTimeToDetectMinutes    Decimal?  @db.Decimal(10, 2)
+  // Mean Time To Recover: average of (resolvedAt - openedAt) across
+  // incidents resolved in the window. Same nullability reasoning.
+  meanTimeToRecoverMinutes   Decimal?  @db.Decimal(10, 2)
   // Computed by the SlaCalculator service at write time (actualPercent <
   // targetPercent), not a DB-generated column — kept as a plain column so
   // it stays queryable/indexable without relying on Postgres GENERATED

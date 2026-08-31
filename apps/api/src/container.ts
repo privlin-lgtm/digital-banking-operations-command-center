@@ -31,6 +31,11 @@ import { PrismaIncidentLookup } from './modules/runbooks/incident-lookup.js';
 import { RunbooksController } from './modules/runbooks/runbooks.controller.js';
 import { PrismaRunbooksRepository } from './modules/runbooks/runbooks.repository.js';
 import { RunbooksService } from './modules/runbooks/runbooks.service.js';
+import { SlaCalculator } from './modules/sla/sla-calculator.js';
+import { PrismaSlaDataSource } from './modules/sla/sla-data.repository.js';
+import { PrismaSlaRecordsRepository } from './modules/sla/sla-records.repository.js';
+import { SlaController } from './modules/sla/sla.controller.js';
+import { SlaTrackingService } from './modules/sla/sla.service.js';
 import { PrismaServiceDependenciesRepository } from './modules/services/service-dependencies.repository.js';
 import { ServiceDependencyService } from './modules/services/service-dependencies.service.js';
 import { ServiceDependenciesController } from './modules/services/service-dependencies.controller.js';
@@ -97,6 +102,12 @@ export interface AppContainer {
     repository: PrismaRunbooksRepository;
     service: RunbooksService;
     controller: RunbooksController;
+  };
+  sla: {
+    calculator: SlaCalculator;
+    recordsRepository: PrismaSlaRecordsRepository;
+    service: SlaTrackingService;
+    controller: SlaController;
   };
 }
 
@@ -189,6 +200,19 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
   );
   const runbooksController = new RunbooksController(runbooksService);
 
+  const slaCalculator = new SlaCalculator();
+  const slaDataSource = new PrismaSlaDataSource(deps.prisma);
+  const slaRecordsRepository = new PrismaSlaRecordsRepository(deps.prisma);
+  const slaTrackingService = new SlaTrackingService(
+    slaDataSource,
+    slaRecordsRepository,
+    servicesRepository,
+    slaCalculator,
+    auditLogger,
+    deps.logger.child({ module: 'sla' }),
+  );
+  const slaController = new SlaController(slaTrackingService);
+
   return {
     prisma: deps.prisma,
     logger: deps.logger,
@@ -225,6 +249,12 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
       repository: runbooksRepository,
       service: runbooksService,
       controller: runbooksController,
+    },
+    sla: {
+      calculator: slaCalculator,
+      recordsRepository: slaRecordsRepository,
+      service: slaTrackingService,
+      controller: slaController,
     },
   };
 }

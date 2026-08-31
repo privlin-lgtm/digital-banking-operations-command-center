@@ -6,6 +6,7 @@ import { healthRouter } from '../../modules/health/health.router.js';
 import { createIncidentsRouter } from '../../modules/incidents/incidents.router.js';
 import { createRemediationRouter } from '../../modules/remediation/remediation.router.js';
 import { createRunbooksRouter } from '../../modules/runbooks/runbooks.router.js';
+import { createSlaRouter } from '../../modules/sla/sla.router.js';
 import { createServicesRouter } from '../../modules/services/services.router.js';
 import { usersRouter } from '../../modules/users/users.router.js';
 
@@ -41,6 +42,7 @@ export function createV1Router(): Router {
   router.use('/incidents', createIncidentsRouter());
   router.use('/remediation', createRemediationRouter());
   router.use('/runbooks', createRunbooksRouter());
+  router.use('/sla', createSlaRouter());
   router.use('/alerts', alertsRouter);
   router.use('/audit-logs', auditRouter);
 

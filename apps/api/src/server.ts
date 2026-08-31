@@ -6,32 +6,43 @@ import { prisma } from './config/prisma.js';
 import { getContainer } from './container.js';
 import { resolveSystemActorId } from './modules/incidents/system-actor.js';
 
-function startEscalationSweep(
+/**
+ * Wires one named recurring job onto an in-process interval, attributing
+ * its automated audit trail to the reserved system actor. Shared by the
+ * escalation sweep and the SLA rollup — same "correct on one instance,
+ * redundant-but-harmless on several, disable and use an external
+ * scheduler at real scale" trade-off applies to both. See
+ * IncidentEscalationService.runSweep's scaling note for the full
+ * reasoning.
+ */
+function startScheduledJob(
+  jobName: string,
+  envVarName: string,
   intervalMs: number,
   systemActorEmail: string,
+  run: (actorId: string) => Promise<unknown>,
 ): NodeJS.Timeout | undefined {
   if (intervalMs === 0) {
-    logger.info('Escalation sweep disabled (ESCALATION_SWEEP_INTERVAL_MS=0)');
+    logger.info(`${jobName} disabled (${envVarName}=0)`);
     return undefined;
   }
 
-  const { incidentEscalation } = getContainer();
-  const sweepLogger = logger.child({ module: 'escalation-scheduler' });
+  const jobLogger = logger.child({ module: `scheduler:${jobName}` });
 
   const timer = setInterval(() => {
     void (async () => {
       const actorId = await resolveSystemActorId(prisma, systemActorEmail);
       if (!actorId) {
-        sweepLogger.warn(
+        jobLogger.warn(
           { systemActorEmail },
-          'System actor not found — skipping sweep (has the seed run?)',
+          'System actor not found — skipping run (has the seed run?)',
         );
         return;
       }
       try {
-        await incidentEscalation.service.runSweep(actorId);
+        await run(actorId);
       } catch (error) {
-        sweepLogger.error({ err: error }, 'Escalation sweep failed');
+        jobLogger.error({ err: error }, `${jobName} failed`);
       }
     })();
   }, intervalMs);
@@ -39,7 +50,7 @@ function startEscalationSweep(
   // Don't let this timer keep the process alive on its own — shutdown()
   // below still stops it explicitly, but this avoids a hang if it doesn't.
   timer.unref();
-  logger.info({ intervalMs }, 'Escalation sweep scheduled');
+  logger.info({ intervalMs }, `${jobName} scheduled`);
   return timer;
 }
 
@@ -56,22 +67,33 @@ async function main(): Promise<void> {
   logger.info('Database connection verified');
 
   const app = createApp();
+  const { incidentEscalation, sla } = getContainer();
 
   const server = app.listen(env.API_PORT, env.API_HOST, () => {
     logger.info({ host: env.API_HOST, port: env.API_PORT }, 'BankOps API listening');
   });
 
-  // See IncidentEscalationService.runSweep's scaling note: this in-process
-  // timer is correct for a single instance and redundant-but-harmless
-  // across several. A multi-instance deployment should disable this
-  // (ESCALATION_SWEEP_INTERVAL_MS=0) and drive the sweep from one external
-  // scheduler hitting POST /api/v1/incidents/escalations/sweep instead.
-  const sweepTimer = startEscalationSweep(env.ESCALATION_SWEEP_INTERVAL_MS, env.SYSTEM_ACTOR_EMAIL);
+  const timers = [
+    startScheduledJob(
+      'escalation-sweep',
+      'ESCALATION_SWEEP_INTERVAL_MS',
+      env.ESCALATION_SWEEP_INTERVAL_MS,
+      env.SYSTEM_ACTOR_EMAIL,
+      (actorId) => incidentEscalation.service.runSweep(actorId),
+    ),
+    startScheduledJob(
+      'sla-rollup',
+      'SLA_ROLLUP_INTERVAL_MS',
+      env.SLA_ROLLUP_INTERVAL_MS,
+      env.SYSTEM_ACTOR_EMAIL,
+      (actorId) => sla.service.runRollup(actorId),
+    ),
+  ].filter((timer): timer is NodeJS.Timeout => timer !== undefined);
 
   async function shutdown(signal: string): Promise<void> {
     logger.info({ signal }, 'Shutting down');
-    if (sweepTimer) {
-      clearInterval(sweepTimer);
+    for (const timer of timers) {
+      clearInterval(timer);
     }
     server.close(async () => {
       await prisma.$disconnect();

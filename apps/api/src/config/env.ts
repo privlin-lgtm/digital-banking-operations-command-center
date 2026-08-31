@@ -18,6 +18,10 @@ const envSchema = z.object({
   // triggers POST /incidents/escalations/sweep from an external scheduler
   // instead — see IncidentEscalationService.runSweep's scaling note).
   ESCALATION_SWEEP_INTERVAL_MS: z.coerce.number().int().min(0).default(60_000),
+  // Recomputes the current month's SlaRecord for every service. Same
+  // disable-for-external-scheduler reasoning as the escalation sweep, and
+  // the same interval semantics — see SlaTrackingService.runRollup.
+  SLA_ROLLUP_INTERVAL_MS: z.coerce.number().int().min(0).default(3_600_000),
   SYSTEM_ACTOR_EMAIL: z.string().default('system@bankops.internal'),
 });
 
