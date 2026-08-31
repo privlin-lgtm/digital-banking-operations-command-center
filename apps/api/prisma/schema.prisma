@@ -51,6 +51,11 @@ enum AlertState {
   RESOLVED
 }
 
+enum AlertComparator {
+  GREATER_THAN
+  LESS_THAN
+}
+
 enum IncidentStatus {
   OPEN
   ACKNOWLEDGED
@@ -149,6 +154,7 @@ model User {
   ownedActions       CorrectiveAction[]      @relation("CorrectiveActionOwner")
   timelineEvents     IncidentTimelineEvent[] @relation("TimelineEventActor")
   incidentComments   IncidentComment[]       @relation("IncidentCommentAuthor")
+  alertRules         AlertRule[]
   auditLogs          AuditLog[]
 
   @@index([role])
@@ -161,27 +167,35 @@ model User {
 // ---------------------------------------------------------------------------
 
 model Service {
-  id        String        @id @default(cuid())
-  name      String        @unique
-  slug      String        @unique
-  tier      ServiceTier   @default(TIER_2)
-  ownerTeam String
+  id         String        @id @default(cuid())
+  name       String        @unique
+  slug       String        @unique
+  tier       ServiceTier   @default(TIER_2)
+  ownerTeam  String
   // Denormalized cache of current status for fast dashboard reads.
   // Source of truth is the most recent Metric/Alert stream; a background
   // job (or the ingest path itself) keeps this column in sync — see
   // "Database Architecture" doc, §Denormalization.
-  status    ServiceStatus @default(UNKNOWN)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  status     ServiceStatus @default(UNKNOWN)
+  // Archival, not deletion: a decommissioned service still has years of
+  // Metric/Incident/SlaRecord history a bank must retain. Hard-deleting
+  // the Service row would cascade-delete that history (see the Metric/
+  // Alert/SlaRecord relations below); archiving just hides it from the
+  // active catalog while every historical FK stays intact. Null = active.
+  archivedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   metrics      Metric[]
   alerts       Alert[]
+  alertRules   AlertRule[]
   incidents    Incident[]
   slaRecords   SlaRecord[]
   dependsOn    ServiceDependency[] @relation("DependentService")
   dependedOnBy ServiceDependency[] @relation("UpstreamService")
 
   @@index([tier, status])
+  @@index([archivedAt])
   @@map("services")
 }
 
@@ -255,6 +269,36 @@ model Alert {
   @@index([incidentId])
   @@index([state, severity])
   @@map("alerts")
+}
+
+/// Threshold configuration the alert engine evaluates against every metric
+/// sample recorded for (serviceId, metricName). At most one rule per pair —
+/// realistic alerting systems support multiple rules per metric (different
+/// windows, different comparators), but one rule with four severity tiers
+/// covers this platform's actual need without the added complexity of a
+/// rule-priority/conflict-resolution scheme.
+model AlertRule {
+  id                String          @id @default(cuid())
+  serviceId         String
+  service           Service         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  metricName        String
+  comparator        AlertComparator
+  // Evaluated most-severe first. Any may be null — a rule doesn't have to
+  // define all four tiers (e.g. a rule with only criticalThreshold set
+  // never fires SEV2-4).
+  criticalThreshold Float?
+  highThreshold     Float?
+  mediumThreshold   Float?
+  lowThreshold      Float?
+  isActive          Boolean         @default(true)
+  createdById       String
+  createdBy         User            @relation(fields: [createdById], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([serviceId, metricName])
+  @@index([isActive])
+  @@map("alert_rules")
 }
 
 model Incident {

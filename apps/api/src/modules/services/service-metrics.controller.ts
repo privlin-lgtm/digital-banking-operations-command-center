@@ -1,5 +1,7 @@
 import type { Metric } from '@prisma/client';
 import type { ParamsDictionary, Request, Response } from 'express-serve-static-core';
+import { requireUser } from '../../lib/require-user.js';
+import type { AlertsService } from '../alerts/alerts.service.js';
 import type { ListMetricsQuery, RecordMetricBody } from './service-metrics.schema.js';
 import type { ServiceHealthService } from './service-metrics.service.js';
 
@@ -17,7 +19,10 @@ function serializeMetric(metric: Metric) {
 }
 
 export class ServiceHealthController {
-  constructor(private readonly healthService: ServiceHealthService) {}
+  constructor(
+    private readonly healthService: ServiceHealthService,
+    private readonly alertsService: AlertsService,
+  ) {}
 
   list = async (
     req: Request<{ id: string } & ParamsDictionary, unknown, unknown, ListMetricsQuery>,
@@ -33,11 +38,26 @@ export class ServiceHealthController {
     res.json({ data });
   };
 
+  /**
+   * Recording a metric and evaluating it against any configured alert
+   * rule happen back to back, in the same request — there's no polling
+   * loop between "a sample arrived" and "check if it breaches a
+   * threshold." See AlertsService.evaluateMetric for why that's the
+   * whole engine's trigger, not a scheduled sweep.
+   */
   record = async (
     req: Request<{ id: string }, unknown, RecordMetricBody>,
     res: Response,
   ): Promise<void> => {
+    const user = requireUser(req);
     const metric = await this.healthService.recordMetric(req.params.id, req.body);
+    await this.alertsService.evaluateMetric(
+      req.params.id,
+      req.body.metricName,
+      req.body.value,
+      user.id,
+      user.role,
+    );
     res.status(201).json({ data: serializeMetric(metric) });
   };
 }

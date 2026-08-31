@@ -3,6 +3,11 @@ import type { Logger } from 'pino';
 import { prisma as defaultPrisma } from './config/prisma.js';
 import { logger as defaultLogger } from './config/logger.js';
 import { PrismaAuditLogger } from './modules/audit/audit-logger.js';
+import { PrismaAlertRulesRepository } from './modules/alerts/alert-rules.repository.js';
+import { AlertsController } from './modules/alerts/alerts.controller.js';
+import { PrismaAlertsRepository } from './modules/alerts/alerts.repository.js';
+import { AlertsService } from './modules/alerts/alerts.service.js';
+import { ThresholdEvaluator } from './modules/alerts/threshold-evaluator.js';
 import { EscalationEngine } from './modules/incidents/escalation-engine.js';
 import { PrismaIncidentCommentsRepository } from './modules/incidents/incident-comments.repository.js';
 import { IncidentEscalationController } from './modules/incidents/incident-escalation.controller.js';
@@ -90,6 +95,13 @@ export interface AppContainer {
     service: ServiceHealthService;
     controller: ServiceHealthController;
   };
+  alerts: {
+    repository: PrismaAlertsRepository;
+    rulesRepository: PrismaAlertRulesRepository;
+    evaluator: ThresholdEvaluator;
+    service: AlertsService;
+    controller: AlertsController;
+  };
   incidents: {
     repository: PrismaIncidentsRepository;
     service: IncidentsService;
@@ -152,7 +164,6 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
     servicesRepository,
     deps.logger.child({ module: 'service-health' }),
   );
-  const serviceHealthController = new ServiceHealthController(serviceHealthService);
 
   const incidentsRepository = new PrismaIncidentsRepository(deps.prisma);
   const incidentTimelineRepository = new PrismaIncidentTimelineRepository(deps.prisma);
@@ -170,6 +181,25 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
     deps.logger.child({ module: 'incidents' }),
   );
   const incidentsController = new IncidentsController(incidentsService);
+
+  // Alerts are wired here — after IncidentsService exists (the engine
+  // auto-creates incidents for SEV1/SEV2 firings) and before
+  // ServiceHealthController (which triggers evaluation on every recorded
+  // metric sample).
+  const alertRulesRepository = new PrismaAlertRulesRepository(deps.prisma);
+  const alertsRepository = new PrismaAlertsRepository(deps.prisma);
+  const thresholdEvaluator = new ThresholdEvaluator();
+  const alertsService = new AlertsService(
+    alertsRepository,
+    alertRulesRepository,
+    incidentsService,
+    thresholdEvaluator,
+    auditLogger,
+    deps.logger.child({ module: 'alerts' }),
+  );
+  const alertsController = new AlertsController(alertsService);
+
+  const serviceHealthController = new ServiceHealthController(serviceHealthService, alertsService);
 
   const escalationEngine = new EscalationEngine();
   const incidentNotifier = new LoggingIncidentNotifier(
@@ -255,6 +285,13 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
       repository: serviceMetricsRepository,
       service: serviceHealthService,
       controller: serviceHealthController,
+    },
+    alerts: {
+      repository: alertsRepository,
+      rulesRepository: alertRulesRepository,
+      evaluator: thresholdEvaluator,
+      service: alertsService,
+      controller: alertsController,
     },
     incidents: {
       repository: incidentsRepository,
