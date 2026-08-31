@@ -28,6 +28,11 @@ COPY --from=builder /app/apps/api ./apps/api
 COPY --from=builder /app/packages/shared ./packages/shared
 USER bankops
 EXPOSE 4000
+# /health always answers 200 (it reports "degraded" in the body for a
+# human dashboard, by design — see health.router.ts) so it can never fail
+# this check. /ready is the one that actually fails non-200 when the
+# database is unreachable, which is what should take a container out of
+# rotation or trigger a restart.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-  CMD wget -qO- http://127.0.0.1:4000/api/v1/health || exit 1
+  CMD wget -qO- http://127.0.0.1:4000/api/v1/ready || exit 1
 CMD ["sh", "-c", "npm run db:migrate -w @bankops/api && npm run start -w @bankops/api"]

@@ -18,7 +18,17 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
       throw new UnauthorizedError();
     }
 
-    const payload = jwt.verify(token, env.JWT_SECRET) as AccessTokenPayload;
+    // Pinning the algorithm is defense-in-depth against algorithm-confusion
+    // attacks: without an explicit allowlist, jwt.verify trusts whatever
+    // `alg` the token itself claims, rather than only the one this app
+    // actually signs with (see auth.service.ts's jwt.sign call). Pinning
+    // `issuer` the same way rejects a token that's otherwise validly
+    // signed by this same secret but was never meant to be a BankOps
+    // access token.
+    const payload = jwt.verify(token, env.JWT_SECRET, {
+      algorithms: ['HS256'],
+      issuer: 'bankops-api',
+    }) as AccessTokenPayload;
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
 
     if (!user || !user.isActive) {

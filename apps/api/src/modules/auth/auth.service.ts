@@ -8,15 +8,20 @@ import type { LoginInput } from './auth.schema.js';
 
 export const ACCESS_COOKIE = 'bankops_access';
 
+// Not a real user's hash — just something for bcrypt.compare to spend the
+// same ~100ms against when the account lookup below comes back empty, so
+// "no such email" and "wrong password" take the same amount of time. Skip
+// that compare entirely (as this used to) and the two cases are trivially
+// distinguishable by response time, which is a user-enumeration oracle:
+// an attacker can find out which emails have accounts without ever
+// guessing a password.
+const DUMMY_HASH = '$2a$12$CwTycUXWue0Thq9StjUM0uJ8gY9UZmSVXExtCEs6X5aVGtcnwlpVi';
+
 export async function login(input: LoginInput) {
   const user = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
 
-  if (!user || !user.isActive) {
-    throw new UnauthorizedError('Invalid credentials');
-  }
-
-  const matches = await bcrypt.compare(input.password, user.passwordHash);
-  if (!matches) {
+  const matches = await bcrypt.compare(input.password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !user.isActive || !matches) {
     throw new UnauthorizedError('Invalid credentials');
   }
 

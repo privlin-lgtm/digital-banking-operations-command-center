@@ -41,8 +41,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # /health always answers 200 by design (see apps/api's Dockerfile note);
+    # /ready is the one that fails non-200 when the database is down.
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:4000/api/v1/health']
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:4000/api/v1/ready']
       interval: 15s
       timeout: 5s
       retries: 5

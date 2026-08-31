@@ -1,11 +1,18 @@
 import { Router } from 'express';
+import { UserRole } from '@bankops/shared';
 import { prisma } from '../../config/prisma.js';
 import { asyncHandler } from '../../lib/async-handler.js';
 import { authenticate } from '../../middleware/authenticate.js';
+import { authorize } from '../../middleware/authorize.js';
 
 export const auditRouter = Router();
 
-auditRouter.use(authenticate);
+// Every row here is "who did what" across the whole platform, including
+// security-relevant events (LOGIN/LOGOUT, role-gated actions, service
+// archival). That's an ADMIN-only record in any real bank, not something
+// a VIEWER's read-only access should extend to just because they're
+// logged in.
+auditRouter.use(authenticate, authorize(UserRole.ADMIN));
 
 auditRouter.get(
   '/',
