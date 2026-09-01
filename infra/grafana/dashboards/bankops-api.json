@@ -257,7 +257,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "bankops_sla_actual_percent",
-          "legendFormat": "{{service}}",
+          "legendFormat": "{{bank_service}}",
           "refId": "A"
         }
       ],
@@ -279,7 +279,30 @@
       "title": "Service dependency graph (edges)",
       "type": "table",
       "options": { "showHeader": true },
-      "transformations": [{ "id": "labelsToFields", "options": {} }],
+      "transformations": [
+        { "id": "labelsToFields", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "Value": true,
+              "env": true,
+              "instance": true,
+              "job": true,
+              "service": true,
+              "exported_service": true
+            },
+            "indexByName": { "bank_service": 0, "depends_on": 1, "type": 2 },
+            "renameByName": {
+              "bank_service": "Service",
+              "depends_on": "Depends On",
+              "type": "Dependency"
+            }
+          }
+        }
+      ],
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },

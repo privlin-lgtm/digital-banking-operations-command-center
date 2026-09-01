@@ -18,6 +18,7 @@
         "refresh": 1,
         "includeAll": true,
         "multi": false,
+        "allValue": ".*",
         "current": { "text": "All", "value": "$__all" }
       }
     ]
@@ -42,7 +43,7 @@
         {
           "datasource": { "type": "postgres", "uid": "bankops-postgres" },
           "format": "time_series",
-          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'error_rate_percent'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'error_rate_percent'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND s.slug ~ '$service'\nORDER BY 1",
           "refId": "A"
         }
       ]
@@ -58,7 +59,7 @@
         {
           "datasource": { "type": "postgres", "uid": "bankops-postgres" },
           "format": "time_series",
-          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'p99_latency_ms'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'p99_latency_ms'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND s.slug ~ '$service'\nORDER BY 1",
           "refId": "A"
         }
       ]
@@ -74,7 +75,7 @@
         {
           "datasource": { "type": "postgres", "uid": "bankops-postgres" },
           "format": "time_series",
-          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'availability_percent'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'availability_percent'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND s.slug ~ '$service'\nORDER BY 1",
           "refId": "A"
         }
       ]
@@ -91,7 +92,7 @@
         {
           "datasource": { "type": "postgres", "uid": "bankops-postgres" },
           "format": "time_series",
-          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name || ' — ' || split_part(m.\"metricName\", '.', 2) AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" LIKE 'synthetic.%success_rate'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name || ' — ' || split_part(m.\"metricName\", '.', 2) AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" LIKE 'synthetic.%success_rate'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND s.slug ~ '$service'\nORDER BY 1",
           "refId": "A"
         }
       ]
@@ -107,7 +108,7 @@
         {
           "datasource": { "type": "postgres", "uid": "bankops-postgres" },
           "format": "time_series",
-          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name || ' — ' || split_part(m.\"metricName\", '.', 2) AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" LIKE 'synthetic.%latency_ms'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name || ' — ' || split_part(m.\"metricName\", '.', 2) AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" LIKE 'synthetic.%latency_ms'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND s.slug ~ '$service'\nORDER BY 1",
           "refId": "A"
         }
       ]
@@ -141,7 +142,7 @@
         {
           "datasource": { "type": "postgres", "uid": "bankops-postgres" },
           "format": "time_series",
-          "rawSql": "SELECT sla.\"windowStart\" AS time, sla.\"actualPercent\"::float AS \"actual %\", sla.\"targetPercent\"::float AS \"target %\"\nFROM sla_records sla JOIN services s ON s.id = sla.\"serviceId\"\nWHERE sla.\"windowType\" = 'DAILY'\n  AND $__timeFilter(sla.\"windowStart\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "rawSql": "SELECT sla.\"windowStart\" AS time, sla.\"actualPercent\"::float AS \"actual %\", sla.\"targetPercent\"::float AS \"target %\"\nFROM sla_records sla JOIN services s ON s.id = sla.\"serviceId\"\nWHERE sla.\"windowType\" = 'DAILY'\n  AND $__timeFilter(sla.\"windowStart\")\n  AND s.slug ~ '$service'\nORDER BY 1",
           "refId": "A"
         }
       ]
@@ -229,7 +230,7 @@
         {
           "datasource": { "type": "postgres", "uid": "bankops-postgres" },
           "format": "time_series",
-          "rawSql": "SELECT m.\"recordedAt\" AS time, m.value AS \"p99_latency_ms\"\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'p99_latency_ms'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, m.value AS \"p99_latency_ms\"\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'p99_latency_ms'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND s.slug ~ '$service'\nORDER BY 1",
           "refId": "A"
         }
       ]
@@ -355,7 +356,7 @@
         {
           "datasource": { "type": "postgres", "uid": "bankops-postgres" },
           "format": "time_series",
-          "rawSql": "SELECT sla.\"windowStart\" AS time,\n  sum(sla.\"errorBudgetConsumedMinutes\"::float) AS \"consumed (min)\",\n  sum(sla.\"errorBudgetMinutes\"::float) AS \"budget (min)\"\nFROM sla_records sla JOIN services s ON s.id = sla.\"serviceId\"\nWHERE sla.\"windowType\" = 'DAILY'\n  AND $__timeFilter(sla.\"windowStart\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nGROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT sla.\"windowStart\" AS time,\n  sum(sla.\"errorBudgetConsumedMinutes\"::float) AS \"consumed (min)\",\n  sum(sla.\"errorBudgetMinutes\"::float) AS \"budget (min)\"\nFROM sla_records sla JOIN services s ON s.id = sla.\"serviceId\"\nWHERE sla.\"windowType\" = 'DAILY'\n  AND $__timeFilter(sla.\"windowStart\")\n  AND s.slug ~ '$service'\nGROUP BY 1 ORDER BY 1",
           "refId": "A"
         }
       ]

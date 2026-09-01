@@ -96,7 +96,14 @@ new client.Gauge({
 new client.Gauge({
   name: 'bankops_sla_breaches_current',
   help: 'Services currently breaching their SLA in the most recent monthly window',
-  labelNames: ['service'] as const,
+  // Named bank_service, not service: the bankops-api scrape job in
+  // prometheus.yml already attaches a static `service: bankops-api` label
+  // to every metric it collects. Prometheus's default (honor_labels: false)
+  // resolves that collision by renaming *this* label to exported_service
+  // and keeping the scrape config's value — every series silently reports
+  // service="bankops-api" instead of the real one. Found by actually
+  // checking Grafana's rendered legend, not by reading the code.
+  labelNames: ['bank_service'] as const,
   registers: [register],
   async collect() {
     // Latest row per service, not an exact match on "the 1st of this month
@@ -111,7 +118,7 @@ new client.Gauge({
       select: { service: { select: { slug: true } } },
     });
     for (const row of rows) {
-      this.set({ service: row.service.slug }, 1);
+      this.set({ bank_service: row.service.slug }, 1);
     }
   },
 });
@@ -128,7 +135,8 @@ new client.Gauge({
 new client.Gauge({
   name: 'bankops_sla_actual_percent',
   help: "Current month's actual SLA percentage per service (compare against each service's target in the fleet dashboard)",
-  labelNames: ['service'] as const,
+  // See bankops_sla_breaches_current above for why this is bank_service, not service.
+  labelNames: ['bank_service'] as const,
   registers: [register],
   async collect() {
     const rows = await prisma.slaRecord.findMany({
@@ -138,7 +146,7 @@ new client.Gauge({
       select: { actualPercent: true, service: { select: { slug: true } } },
     });
     for (const row of rows) {
-      this.set({ service: row.service.slug }, Number(row.actualPercent));
+      this.set({ bank_service: row.service.slug }, Number(row.actualPercent));
     }
   },
 });
@@ -178,7 +186,8 @@ new client.Gauge({
 new client.Gauge({
   name: 'bankops_service_dependency_info',
   help: 'Service dependency graph edges (always 1; join on the labels)',
-  labelNames: ['service', 'depends_on', 'type'] as const,
+  // See bankops_sla_breaches_current above for why this is bank_service, not service.
+  labelNames: ['bank_service', 'depends_on', 'type'] as const,
   registers: [register],
   async collect() {
     const rows = await prisma.serviceDependency.findMany({
@@ -191,7 +200,7 @@ new client.Gauge({
     for (const row of rows) {
       this.set(
         {
-          service: row.service.slug,
+          bank_service: row.service.slug,
           depends_on: row.dependsOnService.slug,
           type: row.dependencyType,
         },
