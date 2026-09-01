@@ -12,14 +12,20 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...init?.headers,
+      },
+    });
+  } catch {
+    throw new ApiError(0, 'NETWORK_ERROR', 'API unreachable');
+  }
 
   if (response.status === 204) {
     return undefined as T;
@@ -37,4 +43,20 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
 
   return body as T;
+}
+
+export function unwrapData<T>(body: { data: T }): T {
+  return body.data;
+}
+
+export function toQuery(params: Record<string, string | boolean | undefined | null>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') {
+      continue;
+    }
+    search.set(key, String(value));
+  }
+  const serialized = search.toString();
+  return serialized ? `?${serialized}` : '';
 }

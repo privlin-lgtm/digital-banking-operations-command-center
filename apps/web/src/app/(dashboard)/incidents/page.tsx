@@ -8,21 +8,15 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useResource } from '@/hooks/useResource';
 import { toQuery } from '@/lib/api';
 import { formatDateTime, formatRelative, shortId } from '@/lib/format';
-import { alertStateVisual, severityVisual } from '@/lib/status';
-import type { AlertRecord, Envelope } from '@/lib/types';
+import { incidentStatusVisual, severityVisual } from '@/lib/status';
+import type { Envelope, IncidentRecord } from '@/lib/types';
 
-const COLUMNS: Column<AlertRecord>[] = [
+const COLUMNS: Column<IncidentRecord>[] = [
   {
     key: 'id',
     header: 'ID',
     className: 'w-24 font-mono text-2xs text-muted',
     render: (row) => <span title={row.id}>{shortId(row.id)}</span>,
-  },
-  {
-    key: 'state',
-    header: 'State',
-    className: 'w-28',
-    render: (row) => <StatusBadge {...alertStateVisual(row.state)} />,
   },
   {
     key: 'sev',
@@ -31,41 +25,56 @@ const COLUMNS: Column<AlertRecord>[] = [
     render: (row) => <StatusBadge {...severityVisual(row.severity)} />,
   },
   {
-    key: 'rule',
-    header: 'Rule',
-    render: (row) => <span className="font-mono text-xs text-bright">{row.ruleName}</span>,
+    key: 'status',
+    header: 'Status',
+    className: 'w-28',
+    render: (row) => <StatusBadge {...incidentStatusVisual(row.status)} />,
+  },
+  {
+    key: 'title',
+    header: 'Title',
+    render: (row) => (
+      <div>
+        <p className="text-bright">{row.title}</p>
+        {row.severityLabel ? (
+          <p className="font-mono text-2xs text-muted">{row.severityLabel}</p>
+        ) : null}
+      </div>
+    ),
   },
   {
     key: 'service',
     header: 'Service',
     className: 'w-28 font-mono text-2xs',
-    render: (row) => shortId(row.serviceId),
+    render: (row) => shortId(row.primaryServiceId),
   },
   {
-    key: 'incident',
-    header: 'Incident',
+    key: 'commander',
+    header: 'Commander',
     className: 'w-28 font-mono text-2xs',
-    render: (row) => shortId(row.incidentId),
+    render: (row) => shortId(row.commanderId),
   },
   {
-    key: 'fired',
-    header: 'Fired',
+    key: 'opened',
+    header: 'Opened',
     className: 'w-36 font-mono text-2xs',
-    render: (row) => <span title={formatDateTime(row.firedAt)}>{formatRelative(row.firedAt)}</span>,
+    render: (row) => (
+      <span title={formatDateTime(row.openedAt)}>{formatRelative(row.openedAt)}</span>
+    ),
   },
 ];
 
-export default function AlertsPage() {
-  const [state, setState] = useState('');
+export default function IncidentsPage() {
+  const [status, setStatus] = useState('');
   const [severity, setSeverity] = useState('');
-  const path = useMemo(() => `/alerts${toQuery({ state, severity })}`, [state, severity]);
-  const { data, error, loading, reload } = useResource<Envelope<AlertRecord[]>>(path);
+  const path = useMemo(() => `/incidents${toQuery({ status, severity })}`, [status, severity]);
+  const { data, error, loading, reload } = useResource<Envelope<IncidentRecord[]>>(path);
   const rows = data?.data ?? [];
 
   return (
     <PageShell
-      title="Alerts"
-      subtitle="Triage monitor signals across payments, identity, and core banking."
+      title="Incidents"
+      subtitle="Command queue for active and historical production incidents."
       toolbar={
         <FilterBar
           trailing={
@@ -75,14 +84,16 @@ export default function AlertsPage() {
           }
         >
           <FilterSelect
-            label="State"
-            value={state}
-            onChange={setState}
+            label="Status"
+            value={status}
+            onChange={setStatus}
             options={[
               { value: '', label: 'All' },
-              { value: 'FIRING', label: 'Firing' },
+              { value: 'OPEN', label: 'Open' },
               { value: 'ACKNOWLEDGED', label: 'Acknowledged' },
+              { value: 'MITIGATED', label: 'Mitigated' },
               { value: 'RESOLVED', label: 'Resolved' },
+              { value: 'CLOSED', label: 'Closed' },
             ]}
           />
           <FilterSelect
@@ -91,10 +102,10 @@ export default function AlertsPage() {
             onChange={setSeverity}
             options={[
               { value: '', label: 'All' },
-              { value: 'SEV1', label: 'SEV1' },
-              { value: 'SEV2', label: 'SEV2' },
-              { value: 'SEV3', label: 'SEV3' },
-              { value: 'SEV4', label: 'SEV4' },
+              { value: 'P1', label: 'P1' },
+              { value: 'P2', label: 'P2' },
+              { value: 'P3', label: 'P3' },
+              { value: 'P4', label: 'P4' },
             ]}
           />
         </FilterBar>
@@ -106,10 +117,10 @@ export default function AlertsPage() {
         getRowKey={(row) => row.id}
         loading={loading}
         error={error}
-        errorTitle="Unable to load alerts"
-        emptyTitle="No alerts in this query"
-        emptyDescription="The queue is quiet for the selected state and severity."
-        emptyHint="GET /alerts"
+        errorTitle="Unable to load incidents"
+        emptyTitle="No incidents match this query"
+        emptyDescription="Adjust status or severity, or wait for the next page from on-call."
+        emptyHint="GET /incidents"
         onRetry={reload}
       />
     </PageShell>
