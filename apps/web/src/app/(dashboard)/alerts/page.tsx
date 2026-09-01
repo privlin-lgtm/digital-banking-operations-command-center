@@ -15,19 +15,19 @@ const COLUMNS: Column<AlertRecord>[] = [
   {
     key: 'id',
     header: 'ID',
-    className: 'w-24 font-mono text-2xs text-muted',
+    className: 'w-20 font-mono text-2xs text-muted',
     render: (row) => <span title={row.id}>{shortId(row.id)}</span>,
   },
   {
     key: 'state',
     header: 'State',
-    className: 'w-28',
+    className: 'w-24',
     render: (row) => <StatusBadge {...alertStateVisual(row.state)} />,
   },
   {
     key: 'sev',
     header: 'Sev',
-    className: 'w-20',
+    className: 'w-14',
     render: (row) => <StatusBadge {...severityVisual(row.severity)} />,
   },
   {
@@ -50,7 +50,8 @@ const COLUMNS: Column<AlertRecord>[] = [
   {
     key: 'fired',
     header: 'Fired',
-    className: 'w-36 font-mono text-2xs',
+    className: 'w-28 font-mono text-2xs',
+    align: 'right' as const,
     render: (row) => <span title={formatDateTime(row.firedAt)}>{formatRelative(row.firedAt)}</span>,
   },
 ];
@@ -65,15 +66,10 @@ export default function AlertsPage() {
   return (
     <PageShell
       title="Alerts"
-      subtitle="Triage monitor signals across payments, identity, and core banking."
+      subtitle="Monitor signals across payments, identity, and core banking"
+      flush
       toolbar={
-        <FilterBar
-          trailing={
-            <span className="font-mono text-2xs text-muted">
-              {loading ? 'Loading…' : `${rows.length} rows`}
-            </span>
-          }
-        >
+        <FilterBar trailing={loading ? 'Loading' : `${rows.length} rows`}>
           <FilterSelect
             label="State"
             value={state}
@@ -104,6 +100,8 @@ export default function AlertsPage() {
         columns={COLUMNS}
         rows={rows}
         getRowKey={(row) => row.id}
+        getRowAccent={(row) => severityVisual(row.severity).tone}
+        frameless
         loading={loading}
         error={error}
         errorTitle="Unable to load alerts"

@@ -36,35 +36,31 @@ export function Topbar({
   }
 
   return (
-    <header className="flex min-h-12 items-center justify-between gap-4 border-b border-line bg-panel px-4">
-      <div className="min-w-0 py-2">
-        <h1 className="truncate text-sm font-semibold tracking-tight text-bright">{title}</h1>
-        <p className="truncate text-2xs text-muted">{subtitle}</p>
+    <header className="flex h-10 shrink-0 items-center justify-between gap-4 border-b border-line bg-panel px-3">
+      <div className="flex min-w-0 items-baseline gap-2">
+        <h1 className="truncate text-xs font-medium text-bright">{title}</h1>
+        <span className="hidden truncate text-2xs text-muted lg:inline">{subtitle}</span>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {actions}
-        <span className="hidden items-center gap-1.5 border border-status-healthy/30 bg-status-healthy/10 px-2 py-0.5 font-mono text-2xs uppercase tracking-[0.12em] text-status-healthy sm:inline-flex">
-          <span className="live-dot size-1.5 bg-status-healthy" />
-          Live
-        </span>
-        <span className="hidden border border-line px-2 py-0.5 font-mono text-2xs uppercase tracking-[0.12em] text-muted md:inline">
-          Prod
-        </span>
-        <time
-          dateTime={now}
-          className="hidden font-mono text-2xs tabular-nums text-muted lg:inline"
-          title="Operator local time"
-        >
-          {formatDateTime(now)}
-        </time>
-        {user ? (
-          <span
-            className="hidden max-w-[180px] truncate font-mono text-2xs text-muted xl:inline"
-            title={user.email}
-          >
-            {user.role} · {user.name}
+        <div className="hidden items-center gap-2 font-mono text-2xs tabular-nums text-muted md:flex">
+          <span className="inline-flex items-center gap-1 text-status-healthy">
+            <span className="size-1.5 bg-status-healthy" />
+            LIVE
           </span>
-        ) : null}
+          <span className="text-line-strong">|</span>
+          <span>PROD</span>
+          <span className="text-line-strong">|</span>
+          <time dateTime={now}>{formatDateTime(now)}</time>
+          {user ? (
+            <>
+              <span className="text-line-strong">|</span>
+              <span className="max-w-[160px] truncate" title={user.email}>
+                {user.role} · {user.name}
+              </span>
+            </>
+          ) : null}
+        </div>
         <button
           type="button"
           className="ops-btn-ghost"

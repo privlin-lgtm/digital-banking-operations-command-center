@@ -53,13 +53,18 @@ export function shortId(id: string | null | undefined): string {
   return id.slice(0, 8);
 }
 
-export function formatPercent(value: string | number | null | undefined): string {
+export function parsePercent(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === '') {
-    return '—';
+    return null;
   }
   const numeric = typeof value === 'number' ? value : Number(value);
-  if (Number.isNaN(numeric)) {
-    return String(value);
+  return Number.isNaN(numeric) ? null : numeric;
+}
+
+export function formatPercent(value: string | number | null | undefined): string {
+  const numeric = parsePercent(value);
+  if (numeric === null) {
+    return value === null || value === undefined || value === '' ? '—' : String(value);
   }
   return `${numeric.toFixed(3)}%`;
 }

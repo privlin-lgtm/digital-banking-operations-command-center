@@ -4,11 +4,13 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import type { ApiError } from '@/lib/api';
+import { accentBorderClass, type StatusTone } from '@/lib/status';
 
 export interface Column<T> {
   key: string;
   header: string;
   className?: string;
+  align?: 'left' | 'right';
   render: (row: T) => ReactNode;
 }
 
@@ -16,6 +18,7 @@ export function DataTable<T>({
   columns,
   rows,
   getRowKey,
+  getRowAccent,
   loading,
   error,
   errorTitle,
@@ -23,10 +26,12 @@ export function DataTable<T>({
   emptyDescription,
   emptyHint,
   onRetry,
+  frameless = false,
 }: {
   columns: Column<T>[];
   rows: T[];
   getRowKey: (row: T) => string;
+  getRowAccent?: (row: T) => StatusTone | undefined;
   loading: boolean;
   error: ApiError | Error | null;
   errorTitle: string;
@@ -34,6 +39,7 @@ export function DataTable<T>({
   emptyDescription: string;
   emptyHint?: string;
   onRetry: () => void;
+  frameless?: boolean;
 }) {
   if (loading && rows.length === 0) {
     return <TableSkeleton cols={Math.min(columns.length, 6)} />;
@@ -48,20 +54,21 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="overflow-x-auto border border-line">
+    <div className={cn('overflow-x-auto', !frameless && 'border border-line')}>
       {error ? (
         <div className="border-b border-line">
           <ErrorState title={errorTitle} error={error} onRetry={onRetry} />
         </div>
       ) : null}
       <table className="w-full min-w-[720px] border-collapse text-left">
-        <thead className="sticky top-0 bg-raised">
-          <tr className="border-b border-line">
+        <thead>
+          <tr className="border-b border-line bg-raised">
             {columns.map((column) => (
               <th
                 key={column.key}
                 className={cn(
-                  'h-8 px-3 text-2xs font-medium uppercase tracking-[0.12em] text-muted',
+                  'h-7 px-2.5 text-3xs font-medium uppercase tracking-[0.08em] text-muted',
+                  column.align === 'right' && 'text-right',
                   column.className,
                 )}
               >
@@ -71,18 +78,31 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr
-              key={getRowKey(row)}
-              className="h-9 border-b border-line last:border-b-0 hover:bg-raised/80"
-            >
-              {columns.map((column) => (
-                <td key={column.key} className={cn('px-3 text-xs text-ink', column.className)}>
-                  {column.render(row)}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const accent = getRowAccent?.(row);
+            return (
+              <tr
+                key={getRowKey(row)}
+                className={cn(
+                  'h-8 border-b border-line border-l-2 last:border-b-0 hover:bg-raised/70',
+                  accent ? accentBorderClass(accent) : 'border-l-transparent',
+                )}
+              >
+                {columns.map((column) => (
+                  <td
+                    key={column.key}
+                    className={cn(
+                      'px-2.5 text-xs leading-4 text-ink',
+                      column.align === 'right' && 'text-right',
+                      column.className,
+                    )}
+                  >
+                    {column.render(row)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

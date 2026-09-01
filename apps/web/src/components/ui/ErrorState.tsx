@@ -14,14 +14,14 @@ export function ErrorState({
   const message = error?.message ?? 'Request failed';
 
   return (
-    <div className="border border-status-critical/30 bg-status-critical/5 px-4 py-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="border-l-2 border-status-critical bg-status-critical/5 px-3 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-2xs uppercase tracking-[0.16em] text-status-critical">
-            Error
+          <p className="font-mono text-3xs uppercase tracking-[0.08em] text-status-critical">
+            {code} · {status}
           </p>
-          <h3 className="mt-1 text-sm font-medium text-bright">{title}</h3>
-          <p className="mt-1 text-xs text-muted">{message}</p>
+          <h3 className="mt-0.5 text-xs font-medium text-bright">{title}</h3>
+          <p className="mt-0.5 text-2xs text-muted">{message}</p>
         </div>
         {onRetry ? (
           <button type="button" className="ops-btn-ghost" onClick={onRetry}>
@@ -29,20 +29,6 @@ export function ErrorState({
           </button>
         ) : null}
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 border-t border-line pt-3 font-mono text-2xs text-muted sm:grid-cols-3">
-        <div>
-          <dt className="uppercase tracking-[0.12em]">Code</dt>
-          <dd className="mt-0.5 text-ink">{code}</dd>
-        </div>
-        <div>
-          <dt className="uppercase tracking-[0.12em]">HTTP</dt>
-          <dd className="mt-0.5 text-ink">{status}</dd>
-        </div>
-        <div>
-          <dt className="uppercase tracking-[0.12em]">Action</dt>
-          <dd className="mt-0.5 text-ink">Check API health / session</dd>
-        </div>
-      </dl>
     </div>
   );
 }

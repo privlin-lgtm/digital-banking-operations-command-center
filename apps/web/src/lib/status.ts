@@ -4,22 +4,21 @@ export type StatusTone =
 export interface StatusVisual {
   tone: StatusTone;
   label: string;
-  pulse?: boolean;
 }
 
 const TONE_CLASS: Record<StatusTone, string> = {
-  critical: 'text-status-critical bg-status-critical/10 border-status-critical/35',
-  high: 'text-status-high bg-status-high/10 border-status-high/35',
-  medium: 'text-status-medium bg-status-medium/10 border-status-medium/35',
-  low: 'text-status-low bg-status-low/10 border-status-low/35',
-  healthy: 'text-status-healthy bg-status-healthy/10 border-status-healthy/35',
-  degraded: 'text-status-degraded bg-status-degraded/10 border-status-degraded/35',
-  unknown: 'text-status-unknown bg-status-unknown/10 border-status-unknown/35',
-  info: 'text-status-info bg-status-info/10 border-status-info/35',
-  neutral: 'text-muted bg-raised border-line',
+  critical: 'text-status-critical',
+  high: 'text-status-high',
+  medium: 'text-status-medium',
+  low: 'text-status-low',
+  healthy: 'text-status-healthy',
+  degraded: 'text-status-degraded',
+  unknown: 'text-status-unknown',
+  info: 'text-status-info',
+  neutral: 'text-muted',
 };
 
-const DOT_CLASS: Record<StatusTone, string> = {
+const SWATCH_CLASS: Record<StatusTone, string> = {
   critical: 'bg-status-critical',
   high: 'bg-status-high',
   medium: 'bg-status-medium',
@@ -31,12 +30,32 @@ const DOT_CLASS: Record<StatusTone, string> = {
   neutral: 'bg-muted',
 };
 
+const ACCENT_BORDER: Record<StatusTone, string> = {
+  critical: 'border-l-status-critical',
+  high: 'border-l-status-high',
+  medium: 'border-l-status-medium',
+  low: 'border-l-status-low',
+  healthy: 'border-l-status-healthy',
+  degraded: 'border-l-status-degraded',
+  unknown: 'border-l-status-unknown',
+  info: 'border-l-status-info',
+  neutral: 'border-l-line-strong',
+};
+
 export function toneClass(tone: StatusTone): string {
   return TONE_CLASS[tone];
 }
 
-export function dotClass(tone: StatusTone): string {
-  return DOT_CLASS[tone];
+export function swatchClass(tone: StatusTone): string {
+  return SWATCH_CLASS[tone];
+}
+
+export function fillClass(tone: StatusTone): string {
+  return SWATCH_CLASS[tone];
+}
+
+export function accentBorderClass(tone: StatusTone): string {
+  return ACCENT_BORDER[tone];
 }
 
 export function severityVisual(value: string | null | undefined): StatusVisual {
@@ -61,7 +80,7 @@ export function severityVisual(value: string | null | undefined): StatusVisual {
 export function incidentStatusVisual(value: string | null | undefined): StatusVisual {
   switch (value) {
     case 'OPEN':
-      return { tone: 'critical', label: 'OPEN', pulse: true };
+      return { tone: 'critical', label: 'OPEN' };
     case 'ACKNOWLEDGED':
       return { tone: 'high', label: 'ACK' };
     case 'MITIGATED':
@@ -78,7 +97,7 @@ export function incidentStatusVisual(value: string | null | undefined): StatusVi
 export function alertStateVisual(value: string | null | undefined): StatusVisual {
   switch (value) {
     case 'FIRING':
-      return { tone: 'critical', label: 'FIRING', pulse: true };
+      return { tone: 'critical', label: 'FIRING' };
     case 'ACKNOWLEDGED':
       return { tone: 'high', label: 'ACK' };
     case 'RESOLVED':
@@ -95,7 +114,7 @@ export function serviceStatusVisual(value: string | null | undefined): StatusVis
     case 'DEGRADED':
       return { tone: 'degraded', label: 'DEGRADED' };
     case 'CRITICAL':
-      return { tone: 'critical', label: 'CRITICAL', pulse: true };
+      return { tone: 'critical', label: 'CRITICAL' };
     case 'MAINTENANCE':
       return { tone: 'info', label: 'MAINT' };
     case 'UNKNOWN':
@@ -115,7 +134,7 @@ export function healthVisual(value: string | null | undefined): StatusVisual {
     case 'degraded':
       return { tone: 'degraded', label: 'DEGRADED' };
     case 'down':
-      return { tone: 'critical', label: 'DOWN', pulse: true };
+      return { tone: 'critical', label: 'DOWN' };
     case 'unknown':
       return { tone: 'unknown', label: 'UNKNOWN' };
     default:
@@ -126,13 +145,13 @@ export function healthVisual(value: string | null | undefined): StatusVisual {
 export function tierVisual(value: string | null | undefined): StatusVisual {
   switch (value) {
     case 'TIER_1':
-      return { tone: 'critical', label: 'T1' };
+      return { tone: 'info', label: 'T1' };
     case 'TIER_2':
-      return { tone: 'high', label: 'T2' };
+      return { tone: 'neutral', label: 'T2' };
     case 'TIER_3':
-      return { tone: 'medium', label: 'T3' };
+      return { tone: 'neutral', label: 'T3' };
     case 'TIER_4':
-      return { tone: 'low', label: 'T4' };
+      return { tone: 'neutral', label: 'T4' };
     default:
       return { tone: 'unknown', label: value ?? '—' };
   }

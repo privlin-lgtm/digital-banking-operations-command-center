@@ -41,12 +41,13 @@ const COLUMNS: Column<RunbookRecord>[] = [
   {
     key: 'trigger',
     header: 'Trigger',
-    render: (row) => <span className="line-clamp-2 text-muted">{row.triggerCondition}</span>,
+    render: (row) => <span className="line-clamp-1 text-muted">{row.triggerCondition}</span>,
   },
   {
     key: 'version',
     header: 'Ver',
-    className: 'w-16 font-mono text-2xs',
+    className: 'w-12 font-mono text-2xs',
+    align: 'right',
     render: (row) => `v${row.version}`,
   },
   {
@@ -72,15 +73,10 @@ export default function RunbooksPage() {
   return (
     <PageShell
       title="Runbooks"
-      subtitle="Approved response procedures linked from incident command."
+      subtitle="Approved response procedures for incident command"
+      flush
       toolbar={
-        <FilterBar
-          trailing={
-            <span className="font-mono text-2xs text-muted">
-              {loading ? 'Loading…' : `${rows.length} rows`}
-            </span>
-          }
-        >
+        <FilterBar trailing={loading ? 'Loading' : `${rows.length} rows`}>
           <FilterSearch label="Search" value={q} placeholder="Title or trigger" onChange={setQ} />
           <FilterSelect
             label="Category"
@@ -112,6 +108,7 @@ export default function RunbooksPage() {
         columns={COLUMNS}
         rows={rows}
         getRowKey={(row) => row.id}
+        frameless
         loading={loading}
         error={error}
         errorTitle="Unable to load runbooks"

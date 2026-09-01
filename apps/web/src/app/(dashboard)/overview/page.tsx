@@ -1,6 +1,7 @@
 'use client';
 
 import { PageShell } from '@/components/layout/PageShell';
+import { BarList, StackedBar } from '@/components/ui/Charts';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { MetricCard } from '@/components/ui/MetricCard';
@@ -26,18 +27,24 @@ import type {
 import { isCountMap } from '@/lib/types';
 
 const ACTIVE = new Set(['OPEN', 'ACKNOWLEDGED', 'MITIGATED']);
+const SERVICE_ORDER = ['CRITICAL', 'DEGRADED', 'MAINTENANCE', 'UNKNOWN', 'HEALTHY'] as const;
+const SEV_ORDER = [{ key: 'P1' }, { key: 'P2' }, { key: 'P3' }, { key: 'P4' }] as const;
+
+function normalizeSeverity(value: string): string {
+  return value.startsWith('SEV') ? `P${value.slice(3)}` : value;
+}
 
 const INCIDENT_COLUMNS: Column<IncidentRecord>[] = [
   {
     key: 'sev',
     header: 'Sev',
-    className: 'w-20',
+    className: 'w-14',
     render: (row) => <StatusBadge {...severityVisual(row.severity)} />,
   },
   {
     key: 'status',
     header: 'Status',
-    className: 'w-28',
+    className: 'w-24',
     render: (row) => <StatusBadge {...incidentStatusVisual(row.status)} />,
   },
   {
@@ -48,13 +55,14 @@ const INCIDENT_COLUMNS: Column<IncidentRecord>[] = [
   {
     key: 'service',
     header: 'Service',
-    className: 'w-32 font-mono text-2xs',
+    className: 'w-24 font-mono text-2xs',
     render: (row) => shortId(row.primaryServiceId),
   },
   {
     key: 'opened',
     header: 'Opened',
-    className: 'w-36 font-mono text-2xs',
+    className: 'w-28 font-mono text-2xs',
+    align: 'right',
     render: (row) => (
       <span title={formatDateTime(row.openedAt)}>{formatRelative(row.openedAt)}</span>
     ),
@@ -77,6 +85,18 @@ export default function OverviewPage() {
 
   const metricsLoading = incidents.loading || alerts.loading || services.loading || sla.loading;
 
+  const serviceSegments = SERVICE_ORDER.map((status) => ({
+    label: status,
+    value: serviceRows.filter((row) => row.status === status).length,
+    tone: serviceStatusVisual(status).tone,
+  }));
+
+  const severitySegments = SEV_ORDER.map((sev) => ({
+    label: sev.key,
+    value: activeIncidents.filter((row) => normalizeSeverity(row.severity) === sev.key).length,
+    tone: severityVisual(sev.key).tone,
+  }));
+
   function reloadAll() {
     health.reload();
     incidents.reload();
@@ -88,95 +108,116 @@ export default function OverviewPage() {
   return (
     <PageShell
       title="Overview"
-      subtitle="Shift snapshot across service health, incidents, and SLA posture."
+      subtitle="Production posture for the current desk shift"
       actions={
         <button type="button" className="ops-btn-ghost" onClick={reloadAll}>
           Refresh
         </button>
       }
     >
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {metricsLoading ? (
-          <>
-            <MetricSkeleton />
-            <MetricSkeleton />
-            <MetricSkeleton />
-            <MetricSkeleton />
-          </>
-        ) : (
-          <>
-            <MetricCard
-              label="Active incidents"
-              value={activeIncidents.length}
-              hint="Open / acknowledged / mitigated"
-              tone={activeIncidents.length > 0 ? 'critical' : 'healthy'}
-            />
-            <MetricCard
-              label="Firing alerts"
-              value={firingAlerts.length}
-              hint="Unresolved monitor signals"
-              tone={firingAlerts.length > 0 ? 'high' : 'healthy'}
-            />
-            <MetricCard
-              label="Critical services"
-              value={criticalServices.length}
-              hint={`${serviceRows.length} in catalog`}
-              tone={criticalServices.length > 0 ? 'critical' : 'healthy'}
-            />
-            <MetricCard
-              label="SLA breaches"
-              value={slaRows.length}
-              hint="Current monthly window"
-              tone={slaRows.length > 0 ? 'degraded' : 'healthy'}
-            />
-          </>
-        )}
-      </div>
-
-      <div className="mt-3 grid gap-2 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <Panel title="Platform health" padded>
-          {health.loading && !health.data ? (
-            <p className="font-mono text-2xs text-muted">Probing /health…</p>
-          ) : health.error ? (
-            <ErrorState
-              title="Health endpoint failed"
-              error={health.error}
-              onRetry={health.reload}
-            />
-          ) : health.data ? (
-            <HealthGrid health={health.data} />
+      <div className="flex flex-col gap-px border border-line bg-line">
+        <div className="grid gap-px md:grid-cols-2 xl:grid-cols-4">
+          {metricsLoading ? (
+            <>
+              <MetricSkeleton />
+              <MetricSkeleton />
+              <MetricSkeleton />
+              <MetricSkeleton />
+            </>
           ) : (
-            <p className="text-xs text-muted">No health payload.</p>
+            <>
+              <MetricCard
+                label="Active incidents"
+                value={activeIncidents.length}
+                hint="Open / ack / mitigated"
+                tone={activeIncidents.length > 0 ? 'critical' : 'healthy'}
+              />
+              <MetricCard
+                label="Firing alerts"
+                value={firingAlerts.length}
+                hint="Unresolved monitors"
+                tone={firingAlerts.length > 0 ? 'high' : 'healthy'}
+              />
+              <MetricCard
+                label="Critical services"
+                value={criticalServices.length}
+                hint={`${serviceRows.length} in catalog`}
+                tone={criticalServices.length > 0 ? 'critical' : 'healthy'}
+              />
+              <MetricCard
+                label="SLA breaches"
+                value={slaRows.length}
+                hint="Monthly window"
+                tone={slaRows.length > 0 ? 'degraded' : 'healthy'}
+              />
+            </>
           )}
-        </Panel>
-        <Panel title="Service status" padded>
-          {services.loading && serviceRows.length === 0 ? (
-            <p className="font-mono text-2xs text-muted">Loading catalog…</p>
-          ) : services.error ? (
-            <ErrorState
-              title="Unable to load services"
-              error={services.error}
-              onRetry={services.reload}
-            />
-          ) : (
-            <ServiceStatusGrid services={serviceRows} />
-          )}
-        </Panel>
-      </div>
+        </div>
 
-      <div className="mt-3">
+        <div className="grid gap-px xl:grid-cols-3">
+          <Panel title="Platform health" padded>
+            {health.loading && !health.data ? (
+              <p className="font-mono text-2xs text-muted">Probing /health</p>
+            ) : health.error ? (
+              <ErrorState
+                title="Health endpoint failed"
+                error={health.error}
+                onRetry={health.reload}
+              />
+            ) : health.data ? (
+              <HealthGrid health={health.data} />
+            ) : (
+              <p className="text-2xs text-muted">No health payload.</p>
+            )}
+          </Panel>
+          <Panel title="Service status" padded>
+            {services.loading && serviceRows.length === 0 ? (
+              <p className="font-mono text-2xs text-muted">Loading catalog</p>
+            ) : services.error ? (
+              <ErrorState
+                title="Unable to load services"
+                error={services.error}
+                onRetry={services.reload}
+              />
+            ) : (
+              <div className="space-y-3">
+                <StackedBar segments={serviceSegments} ariaLabel="Service status distribution" />
+                <BarList items={serviceSegments} />
+              </div>
+            )}
+          </Panel>
+          <Panel title="Active incident severity" padded>
+            {incidents.loading && incidentRows.length === 0 ? (
+              <p className="font-mono text-2xs text-muted">Loading incidents</p>
+            ) : incidents.error ? (
+              <ErrorState
+                title="Unable to load incidents"
+                error={incidents.error}
+                onRetry={incidents.reload}
+              />
+            ) : (
+              <div className="space-y-3">
+                <StackedBar segments={severitySegments} ariaLabel="Active incident severity mix" />
+                <BarList items={severitySegments} />
+              </div>
+            )}
+          </Panel>
+        </div>
+
         <Panel title="Active incidents">
           <DataTable
             columns={INCIDENT_COLUMNS}
             rows={activeIncidents}
             getRowKey={(row) => row.id}
+            getRowAccent={(row) => severityVisual(row.severity).tone}
             loading={incidents.loading}
             error={incidents.error}
             errorTitle="Unable to load incidents"
             emptyTitle="No active incidents"
-            emptyDescription="Nothing is open, acknowledged, or mitigated on this desk."
+            emptyDescription="Nothing is open, acknowledged, or mitigated."
             emptyHint="GET /incidents"
             onRetry={incidents.reload}
+            frameless
           />
         </Panel>
       </div>
@@ -193,40 +234,40 @@ function HealthGrid({ health }: { health: HealthResponse }) {
     : null;
 
   return (
-    <dl className="grid gap-3 sm:grid-cols-2">
-      <HealthRow label="API" visual={healthVisual(health.status)} detail={health.service} />
-      <HealthRow
-        label="Database"
-        visual={healthVisual(db)}
-        detail={db ? db.toUpperCase() : 'UNKNOWN'}
-      />
-      <HealthRow
-        label="Open incidents"
-        visual={
-          incidentCount === null
-            ? healthVisual('unknown')
-            : incidentCount > 0
+    <table className="w-full text-left">
+      <tbody>
+        <HealthRow label="API" visual={healthVisual(health.status)} detail={health.service} />
+        <HealthRow
+          label="Database"
+          visual={healthVisual(db)}
+          detail={db ? db.toUpperCase() : 'UNKNOWN'}
+        />
+        <HealthRow
+          label="Open incidents"
+          visual={
+            incidentCount === null
+              ? healthVisual('unknown')
+              : incidentCount > 0
+                ? healthVisual('degraded')
+                : healthVisual('healthy')
+          }
+          detail={incidentCount === null ? 'unknown' : String(incidentCount)}
+        />
+        <HealthRow
+          label="SLA breaches"
+          visual={
+            typeof slaBreaches === 'number' && slaBreaches > 0
               ? healthVisual('degraded')
               : healthVisual('healthy')
-        }
-        detail={incidentCount === null ? 'unknown' : `${incidentCount} active`}
-      />
-      <HealthRow
-        label="SLA (health)"
-        visual={
-          typeof slaBreaches === 'number' && slaBreaches > 0
-            ? healthVisual('degraded')
-            : healthVisual('healthy')
-        }
-        detail={
-          slaBreaches === null || slaBreaches === undefined ? 'n/a' : `${slaBreaches} monthly`
-        }
-      />
-      <div className="sm:col-span-2">
-        <dt className="text-2xs uppercase tracking-[0.12em] text-muted">Last scrape</dt>
-        <dd className="mt-1 font-mono text-2xs text-ink">{formatDateTime(health.timestamp)}</dd>
-      </div>
-    </dl>
+          }
+          detail={slaBreaches === null || slaBreaches === undefined ? 'n/a' : String(slaBreaches)}
+        />
+        <tr className="border-t border-line">
+          <th className="py-1.5 pr-3 text-2xs font-normal text-muted">Last scrape</th>
+          <td className="py-1.5 font-mono text-2xs text-ink">{formatDateTime(health.timestamp)}</td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
 
@@ -240,34 +281,14 @@ function HealthRow({
   detail: string;
 }) {
   return (
-    <div>
-      <dt className="text-2xs uppercase tracking-[0.12em] text-muted">{label}</dt>
-      <dd className="mt-1.5 flex items-center gap-2">
-        <StatusBadge {...visual} />
-        <span className="font-mono text-2xs text-muted">{detail}</span>
-      </dd>
-    </div>
-  );
-}
-
-function ServiceStatusGrid({ services }: { services: ServiceRecord[] }) {
-  const order = ['CRITICAL', 'DEGRADED', 'MAINTENANCE', 'UNKNOWN', 'HEALTHY'] as const;
-  const counts = Object.fromEntries(order.map((status) => [status, 0])) as Record<
-    (typeof order)[number],
-    number
-  >;
-  for (const service of services) {
-    counts[service.status] += 1;
-  }
-
-  return (
-    <ul className="space-y-2">
-      {order.map((status) => (
-        <li key={status} className="flex items-center justify-between gap-3">
-          <StatusBadge {...serviceStatusVisual(status)} />
-          <span className="font-mono text-sm tabular-nums text-bright">{counts[status]}</span>
-        </li>
-      ))}
-    </ul>
+    <tr>
+      <th className="py-1 pr-3 text-2xs font-normal text-muted">{label}</th>
+      <td className="py-1">
+        <div className="flex items-center gap-2">
+          <StatusBadge {...visual} />
+          <span className="font-mono text-2xs text-muted">{detail}</span>
+        </div>
+      </td>
+    </tr>
   );
 }

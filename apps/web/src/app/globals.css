@@ -4,7 +4,7 @@
 
 :root {
   color-scheme: dark;
-  --ring: #3d9eff;
+  --ring: #4c9be8;
 }
 
 html,
@@ -24,25 +24,25 @@ a {
 }
 
 ::selection {
-  background: rgba(61, 158, 255, 0.28);
+  background: rgba(76, 155, 232, 0.22);
 }
 
 :focus-visible {
   outline: 1px solid var(--ring);
-  outline-offset: 1px;
+  outline-offset: 0;
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b1016;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2c3d52;
+  background: #314155;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -51,11 +51,11 @@ a {
 
 @layer components {
   .field-label {
-    @apply mb-1.5 block text-2xs font-medium uppercase tracking-[0.12em] text-muted;
+    @apply mb-1 block text-3xs font-medium uppercase tracking-[0.08em] text-muted;
   }
 
   .field-control {
-    @apply w-full border border-line bg-canvas px-2.5 py-1.5 text-sm text-bright outline-none;
+    @apply w-full border border-line bg-canvas px-2 py-1.5 text-xs text-bright outline-none;
   }
 
   .field-control:focus {
@@ -67,7 +67,7 @@ a {
   }
 
   .filter-control {
-    @apply h-7 border border-line bg-canvas px-2 text-2xs text-ink outline-none;
+    @apply h-6 border border-line bg-canvas px-1.5 text-2xs text-ink outline-none;
   }
 
   .filter-control:focus {
@@ -75,50 +75,24 @@ a {
   }
 
   .ops-btn {
-    @apply inline-flex h-7 items-center justify-center gap-1.5 border px-2.5 text-2xs font-medium uppercase tracking-[0.08em] transition-colors disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex h-6 items-center justify-center gap-1 border px-2 text-3xs font-medium uppercase tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-45;
   }
 
   .ops-btn-primary {
-    @apply ops-btn border-accent/40 bg-accent/15 text-accent hover:bg-accent/25;
+    @apply ops-btn border-accent/50 bg-accent/10 text-accent hover:bg-accent/20;
   }
 
   .ops-btn-ghost {
-    @apply ops-btn border-line bg-transparent text-muted hover:border-line-strong hover:bg-raised hover:text-ink;
+    @apply ops-btn border-line bg-transparent text-muted hover:bg-raised hover:text-ink;
   }
 
   .ops-btn-danger {
     @apply ops-btn border-status-critical/40 bg-status-critical/10 text-status-critical hover:bg-status-critical/20;
   }
-}
 
-@keyframes live-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    box-shadow: 0 0 0 0 rgba(43, 182, 115, 0.45);
+  .meta-sep {
+    @apply text-line-strong;
   }
-  50% {
-    opacity: 0.7;
-    box-shadow: 0 0 0 4px rgba(43, 182, 115, 0);
-  }
-}
-
-@keyframes fire-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-
-.live-dot {
-  animation: live-pulse 1.8s ease-in-out infinite;
-}
-
-.fire-dot {
-  animation: fire-pulse 1.1s ease-in-out infinite;
 }
 
 @keyframes shimmer {
@@ -131,7 +105,7 @@ a {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #161e28 0%, #1e2a38 45%, #161e28 90%);
+  background: linear-gradient(90deg, #1b2330 0%, #243041 50%, #1b2330 100%);
   background-size: 200% 100%;
-  animation: shimmer 1.35s linear infinite;
+  animation: shimmer 1.4s linear infinite;
 }

@@ -15,32 +15,25 @@ const COLUMNS: Column<IncidentRecord>[] = [
   {
     key: 'id',
     header: 'ID',
-    className: 'w-24 font-mono text-2xs text-muted',
+    className: 'w-20 font-mono text-2xs text-muted',
     render: (row) => <span title={row.id}>{shortId(row.id)}</span>,
   },
   {
     key: 'sev',
     header: 'Sev',
-    className: 'w-20',
+    className: 'w-14',
     render: (row) => <StatusBadge {...severityVisual(row.severity)} />,
   },
   {
     key: 'status',
     header: 'Status',
-    className: 'w-28',
+    className: 'w-24',
     render: (row) => <StatusBadge {...incidentStatusVisual(row.status)} />,
   },
   {
     key: 'title',
     header: 'Title',
-    render: (row) => (
-      <div>
-        <p className="text-bright">{row.title}</p>
-        {row.severityLabel ? (
-          <p className="font-mono text-2xs text-muted">{row.severityLabel}</p>
-        ) : null}
-      </div>
-    ),
+    render: (row) => <span className="text-bright">{row.title}</span>,
   },
   {
     key: 'service',
@@ -57,7 +50,8 @@ const COLUMNS: Column<IncidentRecord>[] = [
   {
     key: 'opened',
     header: 'Opened',
-    className: 'w-36 font-mono text-2xs',
+    className: 'w-28 font-mono text-2xs',
+    align: 'right' as const,
     render: (row) => (
       <span title={formatDateTime(row.openedAt)}>{formatRelative(row.openedAt)}</span>
     ),
@@ -74,15 +68,10 @@ export default function IncidentsPage() {
   return (
     <PageShell
       title="Incidents"
-      subtitle="Command queue for active and historical production incidents."
+      subtitle="Command queue for production incidents"
+      flush
       toolbar={
-        <FilterBar
-          trailing={
-            <span className="font-mono text-2xs text-muted">
-              {loading ? 'Loading…' : `${rows.length} rows`}
-            </span>
-          }
-        >
+        <FilterBar trailing={loading ? 'Loading' : `${rows.length} rows`}>
           <FilterSelect
             label="Status"
             value={status}
@@ -115,6 +104,8 @@ export default function IncidentsPage() {
         columns={COLUMNS}
         rows={rows}
         getRowKey={(row) => row.id}
+        getRowAccent={(row) => severityVisual(row.severity).tone}
+        frameless
         loading={loading}
         error={error}
         errorTitle="Unable to load incidents"

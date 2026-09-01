@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     default: 'BankOps Control Center',
     template: '%s · BankOps',
   },
-  description: 'Digital banking operations command center for alerts, cases, and transactions.',
+  description: 'Operations command center for incidents, alerts, services, runbooks, and SLA.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

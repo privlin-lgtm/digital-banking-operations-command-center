@@ -15,10 +15,10 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn('border border-line bg-panel', className)}>
+    <section className={cn('bg-panel', className)}>
       {title ? (
-        <header className="flex h-9 items-center justify-between border-b border-line px-3">
-          <h2 className="text-2xs font-medium uppercase tracking-[0.14em] text-muted">{title}</h2>
+        <header className="flex h-8 items-center justify-between border-b border-line px-3">
+          <h2 className="text-3xs font-medium uppercase tracking-[0.08em] text-muted">{title}</h2>
           {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
         </header>
       ) : null}

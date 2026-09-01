@@ -62,16 +62,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   if (!ready) {
     return (
       <div className="flex min-h-screen">
-        <aside className="w-56 shrink-0 border-r border-line bg-panel" />
+        <aside className="w-52 shrink-0 border-r border-line bg-panel" />
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-12 items-center border-b border-line px-4">
-            <Skeleton className="h-3 w-40" />
+          <header className="flex h-10 items-center border-b border-line px-3">
+            <Skeleton className="h-2.5 w-32" />
           </header>
-          <div className="grid gap-2 p-4 md:grid-cols-4">
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
-            <Skeleton className="h-20" />
+          <div className="grid grid-cols-4 gap-px bg-line p-px">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
           </div>
         </div>
       </div>

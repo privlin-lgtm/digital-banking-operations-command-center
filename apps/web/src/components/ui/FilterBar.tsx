@@ -2,9 +2,11 @@ import type { ReactNode } from 'react';
 
 export function FilterBar({ children, trailing }: { children: ReactNode; trailing?: ReactNode }) {
   return (
-    <div className="flex min-h-10 flex-wrap items-center justify-between gap-2 border-b border-line bg-panel px-4">
-      <div className="flex flex-wrap items-center gap-2 py-1.5">{children}</div>
-      {trailing ? <div className="flex items-center gap-2 py-1.5">{trailing}</div> : null}
+    <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-line bg-panel px-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>
+      {trailing ? (
+        <div className="shrink-0 font-mono text-2xs tabular-nums text-muted">{trailing}</div>
+      ) : null}
     </div>
   );
 }
@@ -22,7 +24,7 @@ export function FilterSelect({
 }) {
   return (
     <label className="flex items-center gap-1.5">
-      <span className="text-2xs uppercase tracking-[0.12em] text-muted">{label}</span>
+      <span className="text-3xs uppercase tracking-[0.08em] text-muted">{label}</span>
       <select
         className="filter-control"
         value={value}
@@ -51,9 +53,9 @@ export function FilterSearch({
 }) {
   return (
     <label className="flex items-center gap-1.5">
-      <span className="text-2xs uppercase tracking-[0.12em] text-muted">{label}</span>
+      <span className="text-3xs uppercase tracking-[0.08em] text-muted">{label}</span>
       <input
-        className="filter-control w-52"
+        className="filter-control w-48"
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}

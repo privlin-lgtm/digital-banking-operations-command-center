@@ -33,14 +33,12 @@ export default function LoginPage() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="w-full max-w-sm border border-line bg-panel p-6">
-      <p className="font-mono text-2xs uppercase tracking-[0.18em] text-accent lg:hidden">
-        BankOps
-      </p>
-      <h2 className="mt-1 text-lg font-semibold tracking-tight text-bright">Sign in</h2>
-      <p className="mt-1 text-xs text-muted">Operator credentials. Sessions are audit-logged.</p>
+    <form onSubmit={onSubmit} className="w-full max-w-sm border border-line bg-panel p-5">
+      <p className="font-mono text-3xs uppercase tracking-[0.12em] text-muted lg:hidden">BankOps</p>
+      <h2 className="text-sm font-medium text-bright">Sign in</h2>
+      <p className="mt-1 text-2xs text-muted">Operator credentials. Sessions are audit-logged.</p>
 
-      <label className="mt-6 block">
+      <label className="mt-5 block">
         <span className="field-label">Email</span>
         <input
           type="email"
@@ -66,22 +64,20 @@ export default function LoginPage() {
       </label>
 
       {error ? (
-        <div className="mt-4 border border-status-critical/30 bg-status-critical/10 px-3 py-2">
-          <p className="font-mono text-2xs uppercase tracking-[0.12em] text-status-critical">
+        <div className="mt-3 border-l-2 border-status-critical bg-status-critical/5 px-3 py-2">
+          <p className="font-mono text-3xs uppercase tracking-[0.08em] text-status-critical">
             {error.code}
             {error.status ? ` · ${error.status}` : ''}
           </p>
-          <p className="mt-1 text-xs text-ink">{error.message}</p>
+          <p className="mt-0.5 text-2xs text-ink">{error.message}</p>
         </div>
       ) : null}
 
-      <button type="submit" disabled={pending} className="ops-btn-primary mt-5 h-8 w-full">
-        {pending ? 'Authenticating…' : 'Sign in'}
+      <button type="submit" disabled={pending} className="ops-btn-primary mt-4 h-7 w-full">
+        {pending ? 'Authenticating' : 'Sign in'}
       </button>
 
-      <p className="mt-4 font-mono text-2xs leading-4 text-muted">
-        Rate-limited · 10 attempts / 15 min
-      </p>
+      <p className="mt-3 font-mono text-3xs text-muted">Rate-limited · 10 attempts / 15 min</p>
     </form>
   );
 }

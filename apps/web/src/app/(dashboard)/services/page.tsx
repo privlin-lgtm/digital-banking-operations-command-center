@@ -15,13 +15,13 @@ const COLUMNS: Column<ServiceRecord>[] = [
   {
     key: 'status',
     header: 'Status',
-    className: 'w-28',
+    className: 'w-24',
     render: (row) => <StatusBadge {...serviceStatusVisual(row.status)} />,
   },
   {
     key: 'tier',
     header: 'Tier',
-    className: 'w-16',
+    className: 'w-12',
     render: (row) => <StatusBadge {...tierVisual(row.tier)} />,
   },
   {
@@ -49,7 +49,8 @@ const COLUMNS: Column<ServiceRecord>[] = [
   {
     key: 'created',
     header: 'Registered',
-    className: 'w-40 font-mono text-2xs',
+    className: 'w-36 font-mono text-2xs',
+    align: 'right',
     render: (row) => formatDateTime(row.createdAt),
   },
 ];
@@ -64,15 +65,10 @@ export default function ServicesPage() {
   return (
     <PageShell
       title="Services"
-      subtitle="Production catalog with current health and ownership."
+      subtitle="Production catalog, health, and ownership"
+      flush
       toolbar={
-        <FilterBar
-          trailing={
-            <span className="font-mono text-2xs text-muted">
-              {loading ? 'Loading…' : `${rows.length} rows`}
-            </span>
-          }
-        >
+        <FilterBar trailing={loading ? 'Loading' : `${rows.length} rows`}>
           <FilterSelect
             label="Status"
             value={status}
@@ -105,6 +101,8 @@ export default function ServicesPage() {
         columns={COLUMNS}
         rows={rows}
         getRowKey={(row) => row.id}
+        getRowAccent={(row) => serviceStatusVisual(row.status).tone}
+        frameless
         loading={loading}
         error={error}
         errorTitle="Unable to load services"
