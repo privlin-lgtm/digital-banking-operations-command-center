@@ -3,6 +3,7 @@ import { createAlertmanagerWebhookRouter } from '../../modules/alerting/alertman
 import { createAlertsRouter } from '../../modules/alerts/alerts.router.js';
 import { auditRouter } from '../../modules/audit/audit.router.js';
 import { authRouter } from '../../modules/auth/auth.router.js';
+import { createDemoModeRouter } from '../../modules/demo-mode/demo-mode.router.js';
 import { createDocsRouter } from '../../modules/docs/docs.router.js';
 import { createFailureSimulatorRouter } from '../../modules/failure-simulator/failure-simulator.router.js';
 import { healthRouter } from '../../modules/health/health.router.js';
@@ -57,6 +58,7 @@ export function createV1Router(): Router {
   router.use('/rca', createRcaRouter());
   router.use('/alerts', createAlertsRouter());
   router.use('/failure-simulations', createFailureSimulatorRouter());
+  router.use('/demo-mode', createDemoModeRouter());
   router.use('/audit-logs', auditRouter);
 
   return router;

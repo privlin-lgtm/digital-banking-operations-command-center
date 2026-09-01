@@ -64,6 +64,11 @@ const envSchema = z
     // short by design, since a chaos-engineering demo scenario should show
     // its metrics degrading in observable real time, not once an hour.
     FAILURE_SIMULATOR_TICK_INTERVAL_MS: z.coerce.number().int().min(0).default(15_000),
+    // Drives Demo Mode's phase state machine forward one tick when a run is
+    // enabled — see DemoModeService. Short by design, same reasoning as the
+    // failure simulator: a live incident-and-recovery narrative should be
+    // watchable in real time during a walkthrough, not once an hour.
+    DEMO_MODE_TICK_INTERVAL_MS: z.coerce.number().int().min(0).default(8_000),
     SYSTEM_ACTOR_EMAIL: z.string().default('system@bankops.internal'),
   })
   // A production boot with the auth cookie NOT marked Secure is an explicit

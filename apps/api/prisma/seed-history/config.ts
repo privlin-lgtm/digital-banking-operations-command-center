@@ -619,6 +619,8 @@ export interface AlertRuleDef {
   highThreshold?: number | undefined;
   mediumThreshold?: number | undefined;
   lowThreshold?: number | undefined;
+  /** Opt-in per rule — see AlertRule.autoRemediateAction. Only these six rules also drive Demo Mode's scripted-looking-but-real incidents (see modules/demo-mode). */
+  autoRemediateAction?: string | undefined;
 }
 
 export interface ComplianceProfile {
@@ -694,6 +696,7 @@ export const ALERT_RULE_DEFS: AlertRuleDef[] = [
     highThreshold: 85,
     mediumThreshold: 70,
     lowThreshold: 55,
+    autoRemediateAction: 'RECONNECT_DATABASE',
   },
   {
     serviceKey: 'core-banking-api',
@@ -712,6 +715,7 @@ export const ALERT_RULE_DEFS: AlertRuleDef[] = [
     highThreshold: 4,
     mediumThreshold: 2,
     lowThreshold: 1,
+    autoRemediateAction: 'FAILOVER_SIMULATION',
   },
   {
     serviceKey: 'card-processing',
@@ -721,6 +725,7 @@ export const ALERT_RULE_DEFS: AlertRuleDef[] = [
     highThreshold: 4,
     mediumThreshold: 2,
     lowThreshold: 1,
+    autoRemediateAction: 'RESTART_SERVICE',
   },
   {
     serviceKey: 'mobile-bff',
@@ -730,6 +735,7 @@ export const ALERT_RULE_DEFS: AlertRuleDef[] = [
     highThreshold: 1500,
     mediumThreshold: 800,
     lowThreshold: 400,
+    autoRemediateAction: 'CLEAR_CACHE',
   },
   {
     serviceKey: 'notification-service',
@@ -739,6 +745,7 @@ export const ALERT_RULE_DEFS: AlertRuleDef[] = [
     highThreshold: 88,
     mediumThreshold: 75,
     lowThreshold: 65,
+    autoRemediateAction: 'RESTART_SERVICE',
   },
   {
     serviceKey: 'auth-service',
@@ -748,6 +755,7 @@ export const ALERT_RULE_DEFS: AlertRuleDef[] = [
     highThreshold: 4,
     mediumThreshold: 2,
     lowThreshold: 1,
+    autoRemediateAction: 'RESTART_SERVICE',
   },
   {
     serviceKey: 'ledger-sync',

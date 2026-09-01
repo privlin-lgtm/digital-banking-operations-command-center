@@ -50,6 +50,11 @@ tags:
     description: Root-cause analysis reports and their corrective actions, four-eyes reviewed.
   - name: Failure Simulator
     description: Chaos-engineering fault injection, feeding the real alert-evaluation path.
+  - name: Demo Mode
+    description: >-
+      Runs one of six narrative archetypes end-to-end through the real
+      alert/incident/remediation/SLA/RCA pipelines for live walkthroughs —
+      see docs/architecture/adr/0009-demo-mode-real-pipelines-not-fabricated-data.md.
   - name: Audit Log
     description: The platform-wide, append-only "who did what" record. ADMIN only.
   - name: Internal
@@ -698,6 +703,67 @@ paths:
       description: 'Requires: COMMANDER or ADMIN'
       parameters: [{ $ref: '#/components/parameters/id' }]
       responses: { '200': { description: Stopped } }
+
+  /demo-mode:
+    get:
+      tags: [Demo Mode]
+      summary: Get the current (or last) demo run's state
+      responses:
+        {
+          '200':
+            {
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } },
+            },
+        }
+  /demo-mode/enable:
+    post:
+      tags: [Demo Mode]
+      summary: Start (or restart) a demo run
+      description: >-
+        Requires: COMMANDER or ADMIN. `scenario`, `intensity`, and `autoLoop`
+        are all optional — an unspecified scenario is chosen at random,
+        excluding the one that just ran.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scenario:
+                  type: string
+                  enum:
+                    [
+                      DATABASE_OUTAGE,
+                      DEPENDENCY_FAILURE,
+                      LATENCY_SPIKE,
+                      DEPLOYMENT_FAILURE,
+                      MEMORY_LEAK,
+                      THIRD_PARTY_OUTAGE,
+                    ]
+                intensity: { type: string, enum: [LOW, MEDIUM, HIGH] }
+                autoLoop: { type: boolean }
+      responses:
+        {
+          '200':
+            {
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } },
+            },
+        }
+  /demo-mode/disable:
+    post:
+      tags: [Demo Mode]
+      summary: Stop the current demo run
+      description: 'Requires: COMMANDER or ADMIN'
+      responses:
+        {
+          '200':
+            {
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } },
+            },
+        }
 
   /audit-logs:
     get:

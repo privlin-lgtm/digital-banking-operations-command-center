@@ -144,6 +144,7 @@ async function main(): Promise<void> {
         highThreshold: def.highThreshold ?? null,
         mediumThreshold: def.mediumThreshold ?? null,
         lowThreshold: def.lowThreshold ?? null,
+        autoRemediateAction: def.autoRemediateAction ?? null,
         isActive: true,
         createdById: admin.id,
       },

@@ -8,6 +8,12 @@ import { AlertsController } from './modules/alerts/alerts.controller.js';
 import { PrismaAlertsRepository } from './modules/alerts/alerts.repository.js';
 import { AlertsService } from './modules/alerts/alerts.service.js';
 import { ThresholdEvaluator } from './modules/alerts/threshold-evaluator.js';
+import { DemoModeController } from './modules/demo-mode/demo-mode.controller.js';
+import {
+  PrismaDemoModeRepository,
+  PrismaReviewerLookup,
+} from './modules/demo-mode/demo-mode.repository.js';
+import { DemoModeService } from './modules/demo-mode/demo-mode.service.js';
 import { FailureSimulatorController } from './modules/failure-simulator/failure-simulator.controller.js';
 import { PrismaFailureSimulationsRepository } from './modules/failure-simulator/failure-simulator.repository.js';
 import { FailureSimulatorService } from './modules/failure-simulator/failure-simulator.service.js';
@@ -141,6 +147,11 @@ export interface AppContainer {
     generator: FailureScenarioGenerator;
     service: FailureSimulatorService;
     controller: FailureSimulatorController;
+  };
+  demoMode: {
+    repository: PrismaDemoModeRepository;
+    service: DemoModeService;
+    controller: DemoModeController;
   };
 }
 
@@ -300,6 +311,27 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
   );
   const failureSimulatorController = new FailureSimulatorController(failureSimulatorService);
 
+  // Reuses servicesRepository / serviceHealthService / alertsService /
+  // incidentsService / slaTrackingService / rcaService as narrow ports —
+  // same reasoning as failureSimulator above. Wired last: it depends on
+  // every one of those already being built, and its own DB footprint is
+  // just its singleton state row (see demo-mode.repository.ts).
+  const demoModeRepository = new PrismaDemoModeRepository(deps.prisma);
+  const demoModeReviewerLookup = new PrismaReviewerLookup(deps.prisma);
+  const demoModeService = new DemoModeService(
+    demoModeRepository,
+    servicesRepository,
+    serviceHealthService,
+    alertsService,
+    incidentsService,
+    slaTrackingService,
+    rcaService,
+    demoModeReviewerLookup,
+    auditLogger,
+    deps.logger.child({ module: 'demo-mode' }),
+  );
+  const demoModeController = new DemoModeController(demoModeService);
+
   return {
     prisma: deps.prisma,
     logger: deps.logger,
@@ -360,6 +392,11 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
       generator: failureScenarioGenerator,
       service: failureSimulatorService,
       controller: failureSimulatorController,
+    },
+    demoMode: {
+      repository: demoModeRepository,
+      service: demoModeService,
+      controller: demoModeController,
     },
   };
 }

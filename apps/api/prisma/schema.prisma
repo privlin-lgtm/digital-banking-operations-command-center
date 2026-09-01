@@ -81,6 +81,40 @@ enum FailureScenario {
   THIRD_PARTY_API_FAILURE
 }
 
+/// The six narrative archetypes Demo Mode cycles through — deliberately the
+/// same six the six-month seed history's flagship incidents use (see
+/// prisma/seed-history/narrative.ts), each pinned to the one real
+/// AlertRule/service pair that already has live thresholds, so a demo run
+/// fires a genuine alert, not a fabricated one. See modules/demo-mode.
+enum DemoScenario {
+  DATABASE_OUTAGE
+  DEPENDENCY_FAILURE
+  LATENCY_SPIKE
+  DEPLOYMENT_FAILURE
+  MEMORY_LEAK
+  THIRD_PARTY_OUTAGE
+}
+
+/// A demo run's position in its own lifecycle. Advanced by DemoModeService's
+/// scheduler tick — see that class for what happens at each phase.
+enum DemoPhase {
+  IDLE
+  BASELINE
+  DEGRADING
+  INCIDENT
+  REMEDIATING
+  RESOLVED
+  RCA_REVIEW
+  COOLDOWN
+}
+
+/// Controls pacing only (tick counts per phase) — not which mechanisms run.
+enum DemoIntensity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum IncidentStatus {
   OPEN
   ACKNOWLEDGED
@@ -364,6 +398,34 @@ model FailureSimulation {
   @@index([serviceId])
   @@index([stoppedAt])
   @@map("failure_simulations")
+}
+
+/// Singleton row (id is always the literal "singleton") holding the one
+/// currently-running (or idle) Demo Mode run. Deliberately plain scalar
+/// columns, no Prisma relations, to the service/incident/RCA it references —
+/// this table is orchestration state for DemoModeService, not a domain
+/// entity anything else joins against. See modules/demo-mode for the state
+/// machine that reads and writes it every scheduler tick.
+model DemoModeState {
+  id               String         @id @default("singleton")
+  enabled          Boolean        @default(false)
+  autoLoop         Boolean        @default(true)
+  intensity        DemoIntensity  @default(MEDIUM)
+  phase            DemoPhase      @default(IDLE)
+  scenario         DemoScenario?
+  lastScenario     DemoScenario?
+  serviceId        String?
+  incidentId       String?
+  alertId          String?
+  rcaReportId      String?
+  phaseStartedAt   DateTime?
+  ticksInPhase     Int            @default(0)
+  phaseTargetTicks Int            @default(0)
+  startedById      String?
+  startedAt        DateTime?
+  updatedAt        DateTime       @updatedAt
+
+  @@map("demo_mode_state")
 }
 
 model Incident {

@@ -21,6 +21,12 @@ import { resolveSystemActor } from './modules/incidents/system-actor.js';
 // whole Postgres cluster, so this only has to avoid colliding with some
 // other lock this codebase takes elsewhere (nothing else does today).
 const FAILURE_SIMULATOR_LOCK_KEY = 947_201_001n;
+// Distinct from FAILURE_SIMULATOR_LOCK_KEY — see the same class of
+// reasoning in DemoModeService.tick's doc comment. Demo Mode advances its
+// own phase state machine unconditionally on each tick it holds the lock,
+// so two replicas ticking it in the same interval would double-advance a
+// run exactly like an unlocked failure simulator would.
+const DEMO_MODE_LOCK_KEY = 947_201_002n;
 
 /**
  * Unlike the escalation sweep and SLA rollup (idempotent by construction —
@@ -103,7 +109,7 @@ async function main(): Promise<void> {
   logger.info('Database connection verified');
 
   const app = createApp();
-  const { incidentEscalation, sla, failureSimulator } = getContainer();
+  const { incidentEscalation, sla, failureSimulator, demoMode } = getContainer();
 
   const server = app.listen(env.API_PORT, env.API_HOST, () => {
     logger.info({ host: env.API_HOST, port: env.API_PORT }, 'BankOps API listening');
@@ -133,6 +139,14 @@ async function main(): Promise<void> {
         withAdvisoryLock(FAILURE_SIMULATOR_LOCK_KEY, () =>
           failureSimulator.service.tick(actor.id, actor.role),
         ),
+    ),
+    startScheduledJob(
+      'demo-mode-tick',
+      'DEMO_MODE_TICK_INTERVAL_MS',
+      env.DEMO_MODE_TICK_INTERVAL_MS,
+      env.SYSTEM_ACTOR_EMAIL,
+      (actor) =>
+        withAdvisoryLock(DEMO_MODE_LOCK_KEY, () => demoMode.service.tick(actor.id, actor.role)),
     ),
   ].filter((timer): timer is NodeJS.Timeout => timer !== undefined);
 
