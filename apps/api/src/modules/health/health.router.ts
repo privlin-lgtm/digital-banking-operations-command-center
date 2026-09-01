@@ -84,9 +84,22 @@ healthRouter.get(
     }
 
     try {
-      const windowStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      // A +/-1 day buffer around "the 1st of this month" rather than an
+      // exact-timestamp match: whatever process computed a given
+      // SlaRecord's windowStart may not share this process's timezone, and
+      // an exact match on local midnight is a real way to silently miss
+      // the row and report zero breaches when there are some.
+      const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      const bufferMs = 24 * 60 * 60 * 1000;
       checks.slaBreaches = await prisma.slaRecord.count({
-        where: { windowType: 'MONTHLY', windowStart, breached: true },
+        where: {
+          windowType: 'MONTHLY',
+          breached: true,
+          windowStart: {
+            gte: new Date(monthStart.getTime() - bufferMs),
+            lt: new Date(monthStart.getTime() + bufferMs),
+          },
+        },
       });
     } catch {
       checks.slaBreaches = null;

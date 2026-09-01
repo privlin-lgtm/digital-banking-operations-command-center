@@ -8,9 +8,17 @@
   "liveNow": false,
   "panels": [
     {
+      "type": "row",
+      "title": "Golden signals — traffic, errors, latency",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "panels": []
+    },
+    {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
       "id": 1,
       "title": "Request rate",
       "type": "timeseries",
@@ -20,13 +28,19 @@
           "expr": "sum(rate(bankops_http_requests_total[5m]))",
           "legendFormat": "all",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(bankops_http_requests_total[5m])) by (route)",
+          "legendFormat": "{{route}}",
+          "refId": "B"
         }
       ]
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
       "id": 5,
       "title": "Error rate (5xx / total)",
       "type": "timeseries",
@@ -42,7 +56,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
       "id": 2,
       "title": "Request duration (p50 / p95 / p99)",
       "type": "timeseries",
@@ -70,7 +84,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": {}, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 9 },
       "id": 3,
       "title": "Requests by status",
       "type": "timeseries",
@@ -85,8 +99,38 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 9 },
+      "id": 9,
+      "title": "Request latency distribution (heatmap)",
+      "type": "heatmap",
+      "options": {
+        "calculate": false,
+        "yAxis": { "unit": "s" },
+        "color": { "mode": "scheme", "scheme": "Spectral", "steps": 64 }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(bankops_http_request_duration_seconds_bucket[5m])) by (le)",
+          "format": "heatmap",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Saturation",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "id": 101,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 18 },
       "id": 4,
       "title": "Heap used",
       "type": "timeseries",
@@ -102,7 +146,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 18 },
       "id": 6,
       "title": "CPU usage",
       "type": "timeseries",
@@ -117,8 +161,48 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 18 },
+      "id": 10,
+      "title": "Event loop lag",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "bankops_nodejs_eventloop_lag_seconds",
+          "legendFormat": "lag",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 18 },
+      "id": 11,
+      "title": "GC pause duration (avg by kind)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(bankops_nodejs_gc_duration_seconds_sum[5m]) / rate(bankops_nodejs_gc_duration_seconds_count[5m])",
+          "legendFormat": "{{kind}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Incidents & SLA",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "id": 102,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": {}, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 27 },
       "id": 7,
       "title": "Open incidents by severity",
       "type": "timeseries",
@@ -134,7 +218,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": {}, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 27 },
       "id": 8,
       "title": "SLA breaches (current month)",
       "type": "timeseries",
@@ -146,16 +230,93 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 99.9 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 27 },
+      "id": 12,
+      "title": "SLA actual % by service (current month)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "bankops_sla_actual_percent",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Only reflects data since Prometheus started scraping this deployment — the full six-month trend lives on the Fleet Operations dashboard."
+    },
+    {
+      "type": "row",
+      "title": "Dependencies & remediation",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 },
+      "id": 103,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 36 },
+      "id": 13,
+      "title": "Service dependency graph (edges)",
+      "type": "table",
+      "options": { "showHeader": true },
+      "transformations": [{ "id": "labelsToFields", "options": {} }],
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "bankops_service_dependency_info",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 36 },
+      "id": 14,
+      "title": "Runbook executions (last 24h, by outcome)",
+      "type": "barchart",
+      "options": { "orientation": "horizontal" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "bankops_runbook_executions_24h",
+          "legendFormat": "{{outcome}}",
+          "instant": true,
+          "refId": "A"
+        }
+      ]
     }
   ],
   "refresh": "10s",
   "schemaVersion": 39,
-  "tags": ["bankops", "api"],
+  "tags": ["bankops", "api", "live"],
   "templating": { "list": [] },
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
   "title": "BankOps API",
   "uid": "bankops-api",
-  "version": 2
+  "version": 3
 }

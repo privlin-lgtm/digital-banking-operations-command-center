@@ -1,0 +1,373 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "description": "Six-month operational history for the simulated bank's service fleet. This data lives in Postgres, not Prometheus — see the BankOps Postgres datasource note — so every panel here is SQL, not PromQL.",
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "label": "Service",
+        "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+        "query": "SELECT slug AS __value, name AS __text FROM services ORDER BY name",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": false,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Golden signals — fleet",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 200,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "id": 1,
+      "title": "Error rate by service",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'error_rate_percent'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "id": 2,
+      "title": "P99 latency by service",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'p99_latency_ms'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "id": 3,
+      "title": "Availability by service (SLI)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'availability_percent'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "id": 4,
+      "title": "Synthetic transaction success rate (SLI)",
+      "type": "timeseries",
+      "description": "Canary probes for the customer journeys that matter most: login, balance check, funds transfer, card payment, mobile login.",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name || ' — ' || split_part(m.\"metricName\", '.', 2) AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" LIKE 'synthetic.%success_rate'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "id": 5,
+      "title": "Synthetic transaction latency (SLI)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, s.name || ' — ' || split_part(m.\"metricName\", '.', 2) AS metric, m.value\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" LIKE 'synthetic.%latency_ms'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "SLA compliance",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "id": 201,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": {
+        "defaults": { "unit": "percent" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "target %" },
+            "properties": [{ "id": "custom.lineStyle", "value": { "dash": [10, 10] } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "id": 6,
+      "title": "SLA actual vs target (daily)",
+      "type": "timeseries",
+      "description": "Select a single service for a clean actual-vs-target read; \"All\" overlays every service's actual line only.",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT sla.\"windowStart\" AS time, sla.\"actualPercent\"::float AS \"actual %\", sla.\"targetPercent\"::float AS \"target %\"\nFROM sla_records sla JOIN services s ON s.id = sla.\"serviceId\"\nWHERE sla.\"windowType\" = 'DAILY'\n  AND $__timeFilter(sla.\"windowStart\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "id": 7,
+      "title": "Services breaching SLA (monthly)",
+      "type": "barchart",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT sla.\"windowStart\" AS time, count(*) FILTER (WHERE sla.breached) AS \"breached services\"\nFROM sla_records sla\nWHERE sla.\"windowType\" = 'MONTHLY' AND $__timeFilter(sla.\"windowStart\")\nGROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Incident trends",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
+      "id": 202,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
+      "id": 8,
+      "title": "Incidents opened per week by severity",
+      "type": "barchart",
+      "options": { "stacking": "normal" },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('week', i.\"openedAt\") AS time, i.severity AS metric, count(*) AS value\nFROM incidents i\nWHERE $__timeFilter(i.\"openedAt\")\nGROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "m" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
+      "id": 9,
+      "title": "MTTD / MTTR trend (weekly, fleet-wide)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT sla.\"windowStart\" AS time,\n  avg(sla.\"meanTimeToDetectMinutes\"::float) AS \"MTTD (min)\",\n  avg(sla.\"meanTimeToRecoverMinutes\"::float) AS \"MTTR (min)\"\nFROM sla_records sla\nWHERE sla.\"windowType\" = 'WEEKLY' AND $__timeFilter(sla.\"windowStart\")\nGROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Latency heatmap",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 38 },
+      "id": 203,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 39 },
+      "id": 10,
+      "title": "P99 latency distribution over time (select a service above)",
+      "type": "heatmap",
+      "options": {
+        "calculate": true,
+        "yAxis": { "unit": "ms" },
+        "color": { "mode": "scheme", "scheme": "Turbo", "steps": 64 }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT m.\"recordedAt\" AS time, m.value AS \"p99_latency_ms\"\nFROM metrics m JOIN services s ON s.id = m.\"serviceId\"\nWHERE m.\"metricName\" = 'p99_latency_ms'\n  AND $__timeFilter(m.\"recordedAt\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Service dependencies",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 },
+      "id": 204,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 50 },
+      "id": 11,
+      "title": "Service dependency graph (edges)",
+      "type": "table",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT s.name AS \"Service\", s.tier AS \"Tier\", d.\"dependencyType\" AS \"Dependency\", u.name AS \"Depends On\"\nFROM service_dependencies d\nJOIN services s ON s.id = d.\"serviceId\"\nJOIN services u ON u.id = d.\"dependsOnServiceId\"\nORDER BY s.name",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Remediation activity",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 60 },
+      "id": 205,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 61 },
+      "id": 12,
+      "title": "Runbook executions per week by outcome",
+      "type": "barchart",
+      "options": { "stacking": "normal" },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('week', ir.\"executedAt\") AS time, ir.outcome AS metric, count(*) AS value\nFROM incident_runbooks ir\nWHERE $__timeFilter(ir.\"executedAt\")\nGROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 61 },
+      "id": 13,
+      "title": "Runbooks by usage",
+      "type": "table",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT r.title AS \"Runbook\", r.category AS \"Category\", count(*) AS \"Executions\",\n  count(*) FILTER (WHERE ir.outcome = 'SUCCESS') AS \"Success\",\n  count(*) FILTER (WHERE ir.outcome = 'PARTIAL') AS \"Partial\",\n  count(*) FILTER (WHERE ir.outcome = 'FAILURE') AS \"Failure\"\nFROM incident_runbooks ir JOIN runbooks r ON r.id = ir.\"runbookId\"\nGROUP BY r.title, r.category\nORDER BY count(*) DESC",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Error budgets",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 70 },
+      "id": 206,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 10, "x": 0, "y": 71 },
+      "id": 14,
+      "title": "Error budget consumed (latest monthly window, by service)",
+      "type": "bargauge",
+      "description": "errorBudgetConsumedMinutes / errorBudgetMinutes for each service's most recent monthly SlaRecord — how much of this month's allowed downtime is already spent.",
+      "options": { "displayMode": "gradient", "orientation": "horizontal" },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT DISTINCT ON (s.id) s.name AS metric,\n  (sla.\"errorBudgetConsumedMinutes\"::float / NULLIF(sla.\"errorBudgetMinutes\"::float, 0)) * 100 AS value\nFROM sla_records sla JOIN services s ON s.id = sla.\"serviceId\"\nWHERE sla.\"windowType\" = 'MONTHLY'\nORDER BY s.id, sla.\"windowStart\" DESC",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "fieldConfig": { "defaults": { "unit": "m" }, "overrides": [] },
+      "gridPos": { "h": 9, "w": 14, "x": 10, "y": 71 },
+      "id": 15,
+      "title": "Error budget burn (daily, fleet-wide)",
+      "type": "timeseries",
+      "description": "Sum of errorBudgetConsumedMinutes vs errorBudgetMinutes across services per day — the burn-down an SRE lead checks to see if the fleet is on pace to exhaust its budget before month end.",
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT sla.\"windowStart\" AS time,\n  sum(sla.\"errorBudgetConsumedMinutes\"::float) AS \"consumed (min)\",\n  sum(sla.\"errorBudgetMinutes\"::float) AS \"budget (min)\"\nFROM sla_records sla JOIN services s ON s.id = sla.\"serviceId\"\nWHERE sla.\"windowType\" = 'DAILY'\n  AND $__timeFilter(sla.\"windowStart\")\n  AND ('$service' = '$__all' OR s.slug = '$service')\nGROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": ["bankops", "fleet", "historical"],
+  "time": { "from": "now-180d", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "BankOps Fleet Operations",
+  "uid": "bankops-fleet",
+  "version": 1
+}

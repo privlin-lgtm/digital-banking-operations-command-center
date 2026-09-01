@@ -80,6 +80,7 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     ports:
       - '9090:9090'
@@ -98,6 +99,10 @@ services:
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_AUTH_ANONYMOUS_ENABLED: 'false'
       GF_SERVER_ROOT_URL: http://localhost:3001
+      # Consumed via $__env{} in datasources.yml for the "BankOps Postgres" datasource.
+      POSTGRES_DB: ${POSTGRES_DB:-bankops}
+      POSTGRES_USER: ${POSTGRES_USER:-bankops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bankops}
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro

@@ -99,13 +99,104 @@ new client.Gauge({
   labelNames: ['service'] as const,
   registers: [register],
   async collect() {
-    const windowStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    // Latest row per service, not an exact match on "the 1st of this month
+    // at local midnight" — the app and whatever computed a given SlaRecord
+    // (a one-off backfill script, a different container, a different TZ)
+    // don't share a clock, so an exact-timestamp match on windowStart is a
+    // real way to silently return nothing.
     const rows = await prisma.slaRecord.findMany({
-      where: { windowType: 'MONTHLY', windowStart, breached: true },
+      where: { windowType: 'MONTHLY', breached: true },
+      orderBy: { windowStart: 'desc' },
+      distinct: ['serviceId'],
       select: { service: { select: { slug: true } } },
     });
     for (const row of rows) {
       this.set({ service: row.service.slug }, 1);
+    }
+  },
+});
+
+/**
+ * The actual percentage, not just a binary breach flag — a Grafana panel
+ * charting this against a target-line threshold shows how close a service
+ * is to breaching, not just whether it already has. Only reflects the
+ * current month going forward from whenever Prometheus started scraping;
+ * it does not backfill history that predates this deployment (that history
+ * lives in Postgres — see the "BankOps Fleet Operations" dashboard, which
+ * queries SlaRecord directly for the full six-month trend).
+ */
+new client.Gauge({
+  name: 'bankops_sla_actual_percent',
+  help: "Current month's actual SLA percentage per service (compare against each service's target in the fleet dashboard)",
+  labelNames: ['service'] as const,
+  registers: [register],
+  async collect() {
+    const rows = await prisma.slaRecord.findMany({
+      where: { windowType: 'MONTHLY' },
+      orderBy: { windowStart: 'desc' },
+      distinct: ['serviceId'],
+      select: { actualPercent: true, service: { select: { slug: true } } },
+    });
+    for (const row of rows) {
+      this.set({ service: row.service.slug }, Number(row.actualPercent));
+    }
+  },
+});
+
+/**
+ * Remediation activity in the last 24h, by outcome. A rolling window
+ * recomputed at scrape time (like every other business gauge here) rather
+ * than an incrementing Counter — there's no in-process write path to hook
+ * a counter into without threading prom-client through the repository
+ * layer, and a 24h rollup is exactly what a "how much remediation is
+ * happening" panel wants to chart over time regardless.
+ */
+new client.Gauge({
+  name: 'bankops_runbook_executions_24h',
+  help: 'Runbook executions recorded in the last 24 hours, by outcome',
+  labelNames: ['outcome'] as const,
+  registers: [register],
+  async collect() {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const rows = await prisma.incidentRunbook.groupBy({
+      by: ['outcome'],
+      where: { executedAt: { gte: since } },
+      _count: { _all: true },
+    });
+    for (const row of rows) {
+      this.set({ outcome: row.outcome }, row._count._all);
+    }
+  },
+});
+
+/**
+ * A static "info" metric (always 1) encoding the service dependency graph
+ * as labels — the standard Prometheus pattern (cf. kube_pod_info) for
+ * exposing relational, rarely-changing data through a metrics endpoint so
+ * a dashboard can render it as a table without a second datasource.
+ */
+new client.Gauge({
+  name: 'bankops_service_dependency_info',
+  help: 'Service dependency graph edges (always 1; join on the labels)',
+  labelNames: ['service', 'depends_on', 'type'] as const,
+  registers: [register],
+  async collect() {
+    const rows = await prisma.serviceDependency.findMany({
+      select: {
+        dependencyType: true,
+        service: { select: { slug: true } },
+        dependsOnService: { select: { slug: true } },
+      },
+    });
+    for (const row of rows) {
+      this.set(
+        {
+          service: row.service.slug,
+          depends_on: row.dependsOnService.slug,
+          type: row.dependencyType,
+        },
+        1,
+      );
     }
   },
 });

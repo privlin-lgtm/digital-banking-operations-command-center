@@ -10,3 +10,25 @@ datasources:
     editable: false
     jsonData:
       timeInterval: 15s
+
+  # Prometheus only ever sees this app's own live process metrics (HTTP
+  # traffic, heap, event loop). The simulated bank's Service catalog — six
+  # months of Metric/Incident/SlaRecord/Alert history — lives directly in
+  # Postgres and was never designed to flow through a scrape pipeline, so
+  # the "BankOps Fleet Operations" dashboard queries it here with SQL
+  # instead of PromQL. This mirrors a common real-world split: Prometheus
+  # for live infra, a SQL-backed source for business/historical rollups.
+  - name: BankOps Postgres
+    type: postgres
+    access: proxy
+    uid: bankops-postgres
+    url: postgres:5432
+    database: $__env{POSTGRES_DB}
+    user: $__env{POSTGRES_USER}
+    editable: false
+    secureJsonData:
+      password: $__env{POSTGRES_PASSWORD}
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false

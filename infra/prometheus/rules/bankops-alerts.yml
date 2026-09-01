@@ -1,0 +1,86 @@
+groups:
+  - name: bankops-golden-signals
+    rules:
+      - alert: HighErrorRate
+        expr: sum(rate(bankops_http_requests_total{status_code=~"5.."}[5m])) / sum(rate(bankops_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'BankOps API 5xx rate is elevated'
+          description: '5xx / total request ratio has been above 5% for 5 minutes (current: {{ $value | humanizePercentage }}).'
+
+      - alert: HighErrorRateCritical
+        expr: sum(rate(bankops_http_requests_total{status_code=~"5.."}[5m])) / sum(rate(bankops_http_requests_total[5m])) > 0.15
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'BankOps API 5xx rate is critical'
+          description: '5xx / total request ratio has been above 15% for 5 minutes (current: {{ $value | humanizePercentage }}) — this is the P1 threshold.'
+
+      - alert: HighP99Latency
+        expr: histogram_quantile(0.99, sum(rate(bankops_http_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'BankOps API p99 latency is elevated'
+          description: 'p99 request latency has been above 1s for 5 minutes (current: {{ $value | humanizeDuration }}).'
+
+      - alert: HighP99LatencyCritical
+        expr: histogram_quantile(0.99, sum(rate(bankops_http_request_duration_seconds_bucket[5m])) by (le)) > 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'BankOps API p99 latency is critical'
+          description: 'p99 request latency has been above 3s for 5 minutes (current: {{ $value | humanizeDuration }}).'
+
+  - name: bankops-saturation
+    rules:
+      - alert: HighHeapUsage
+        expr: bankops_nodejs_heap_size_used_bytes / bankops_nodejs_heap_size_total_bytes > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'BankOps API heap usage is high'
+          description: 'Heap used/total ratio has been above 85% for 10 minutes — check for a memory leak (see the "memory leak" RCA archetype in the fleet history for what this looks like when it turns into an incident).'
+
+      - alert: EventLoopLagHigh
+        expr: bankops_nodejs_eventloop_lag_seconds > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'BankOps API event loop is blocking'
+          description: 'Event loop lag has been above 100ms for 5 minutes, meaning requests are queueing behind synchronous/CPU-bound work.'
+
+  - name: bankops-business
+    rules:
+      - alert: OpenSev1Incident
+        expr: bankops_incidents_open_total{severity="SEV1"} > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'A SEV1 incident has been open for 5+ minutes'
+          description: "This is an independent check against the app's own escalation engine, not a replacement for it — if both agree, trust it; if this fires and BankOps shows no open P1, that mismatch is itself worth investigating."
+
+      - alert: SLABreachActive
+        expr: bankops_sla_breaches_current > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'At least one service is breaching its monthly SLA'
+          description: '{{ $labels.service }} has been in SLA breach for its current monthly window for 15+ minutes.'
+
+      - alert: RunbookFailureSpike
+        expr: bankops_runbook_executions_24h{outcome="FAILURE"} >= 2
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Multiple runbook executions have failed in the last 24h'
+          description: '{{ $value }} runbook executions recorded FAILURE in the last 24 hours — remediation itself is failing repeatedly and needs a human, not just a retry.'
