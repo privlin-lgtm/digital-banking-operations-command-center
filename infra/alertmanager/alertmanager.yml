@@ -1,0 +1,39 @@
+# Closes the P0 finding from the production-readiness audit: alerting
+# rules existed with real thresholds but had no delivery path. This wires
+# them to a real, verifiable receiver — a webhook into the BankOps API
+# itself (logged + counted via bankops_alert_notifications_total) — rather
+# than a literal Slack/PagerDuty integration this environment has no real
+# credentials for. Swapping in a real slack_configs/pagerduty_configs
+# receiver later is a config change here, not a code change anywhere else.
+#
+# The webhook's shared secret is a literal value here rather than templated
+# from an env var: Alertmanager's config format has no environment-variable
+# expansion. Keep this in sync with apps/api's ALERTMANAGER_WEBHOOK_SECRET.
+# A real deployment injects both from the same secrets manager (see the
+# audit's "no secrets manager" finding and infra/vault).
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: bankops-webhook
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity="critical"
+      receiver: bankops-webhook
+      repeat_interval: 1h
+      group_wait: 10s
+
+receivers:
+  - name: bankops-webhook
+    webhook_configs:
+      - url: 'http://api:4000/api/v1/internal/alerts/webhook'
+        send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: '5f59ba9ee88d03b8ce1559404cd27dccbc492eac723110ec'

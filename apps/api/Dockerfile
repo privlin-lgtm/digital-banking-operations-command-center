@@ -35,4 +35,9 @@ EXPOSE 4000
 # rotation or trigger a restart.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD wget -qO- http://127.0.0.1:4000/api/v1/ready || exit 1
-CMD ["sh", "-c", "npm run db:migrate -w @bankops/api && npm run start -w @bankops/api"]
+# Migrations run as their own one-shot step (docker-compose's `migrate`
+# service, overriding this image's entrypoint) before any replica of this
+# CMD starts — see docker-compose.yml's comment on `migrate` for why
+# running `prisma migrate deploy` inline in every replica's own startup
+# was a real problem, not just a style preference.
+CMD ["npm", "run", "start", "-w", "@bankops/api"]

@@ -75,7 +75,7 @@ groups:
           severity: warning
         annotations:
           summary: 'At least one service is breaching its monthly SLA'
-          description: '{{ $labels.service }} has been in SLA breach for its current monthly window for 15+ minutes.'
+          description: '{{ $labels.bank_service }} has been in SLA breach for its current monthly window for 15+ minutes.'
 
       - alert: RunbookFailureSpike
         expr: bankops_runbook_executions_24h{outcome="FAILURE"} >= 2
@@ -84,3 +84,95 @@ groups:
         annotations:
           summary: 'Multiple runbook executions have failed in the last 24h'
           description: '{{ $value }} runbook executions recorded FAILURE in the last 24 hours — remediation itself is failing repeatedly and needs a human, not just a retry.'
+
+  - name: bankops-slo-burn-rate
+    rules:
+      # Multi-window, multi-burn-rate SLO alerting (the Google SRE workbook
+      # pattern) for the one real SLO this system can actually measure from
+      # Prometheus: the API's own request success rate. A static threshold
+      # can't distinguish "will exhaust the monthly error budget in 3 hours"
+      # from "will exhaust it in 3 weeks" — by the time a flat error-rate
+      # threshold trips, the fast-burn case is already a full outage. This
+      # does NOT cover the simulated fleet's per-service error budgets
+      # (SlaRecord.errorBudgetMinutes) — that data lives in Postgres, not
+      # Prometheus, and is visualized instead on the Fleet Operations
+      # dashboard's error-budget panels.
+      #
+      # Target: 99.9% success rate/month → 0.1% error budget.
+      # Fast burn: 14.4x burn rate over 1h (exhausts budget in ~2 days if
+      # sustained) checked against both 1h and 5m windows to avoid a single
+      # short spike paging on its own.
+      - alert: ApiErrorBudgetFastBurn
+        expr: |
+          (
+            sum(rate(bankops_http_requests_total{status_code=~"5.."}[1h]))
+            /
+            sum(rate(bankops_http_requests_total[1h]))
+          ) > (14.4 * 0.001)
+          and
+          (
+            sum(rate(bankops_http_requests_total{status_code=~"5.."}[5m]))
+            /
+            sum(rate(bankops_http_requests_total[5m]))
+          ) > (14.4 * 0.001)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'API error budget burning fast — 2 days to exhaustion at this rate'
+          description: 'Both the 1h and 5m error-rate windows exceed 14.4x the 99.9% SLO burn rate. This is the "page now" tier — at this rate the monthly error budget is gone in about two days.'
+
+      # Slow burn: 6x burn rate over 6h (exhausts budget in ~5 days) — a
+      # ticket-worthy trend, not a page.
+      - alert: ApiErrorBudgetSlowBurn
+        expr: |
+          (
+            sum(rate(bankops_http_requests_total{status_code=~"5.."}[6h]))
+            /
+            sum(rate(bankops_http_requests_total[6h]))
+          ) > (6 * 0.001)
+          and
+          (
+            sum(rate(bankops_http_requests_total{status_code=~"5.."}[30m]))
+            /
+            sum(rate(bankops_http_requests_total[30m]))
+          ) > (6 * 0.001)
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'API error budget burning steadily — about 5 days to exhaustion at this rate'
+          description: 'Both the 6h and 30m error-rate windows exceed 6x the 99.9% SLO burn rate. Worth investigating this shift; not yet an emergency.'
+
+  - name: bankops-schedulers
+    rules:
+      # Thresholds are 2-5x each job's own interval, not a flat number —
+      # a job that ticks every 15s going quiet for 2 minutes is a much
+      # stronger signal than an hourly job being 2 minutes "late". See
+      # bankops_scheduler_last_success_timestamp in metrics.ts: this gauge
+      # previously had no consumer, so a scheduler silently going dark
+      # (e.g. the system-actor lookup failing) showed up only as a single
+      # warn-level log line nobody was watching.
+      - alert: EscalationSweepStale
+        expr: (time() - bankops_scheduler_last_success_timestamp{scheduler_job="escalation-sweep"}) > 300
+        labels:
+          severity: critical
+        annotations:
+          summary: 'The incident escalation sweep has not succeeded in 5+ minutes'
+          description: 'Its default interval is 60s. A stale sweep means breached-SLA incidents stop escalating — check for a missing/renamed system actor first.'
+
+      - alert: SlaRollupStale
+        expr: (time() - bankops_scheduler_last_success_timestamp{scheduler_job="sla-rollup"}) > 7200
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The SLA rollup has not succeeded in 2+ hours'
+          description: 'Its default interval is 1h. SLA/error-budget figures are going stale.'
+
+      - alert: FailureSimulatorTickStale
+        expr: (time() - bankops_scheduler_last_success_timestamp{scheduler_job="failure-simulator-tick"}) > 120
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The failure-simulator tick has not succeeded in 2+ minutes'
+          description: 'Its default interval is 15s and it runs (and records success) every tick regardless of whether a simulation is active, so this firing means the scheduler itself has stopped, not just that no GameDay is in progress.'

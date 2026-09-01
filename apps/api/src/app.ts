@@ -9,6 +9,7 @@ import { createV1Router } from './api/v1/router.js';
 import { loadEnv } from './config/env.js';
 import { logger } from './config/logger.js';
 import { metricsMiddleware } from './config/metrics.js';
+import { createRateLimitStore } from './lib/rate-limit-store.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { notFound } from './middleware/not-found.js';
 import { requestId } from './middleware/request-id.js';
@@ -52,12 +53,14 @@ export function createApp() {
   app.use(cookieParser());
   // 5. rate limiting after parsing is cheap enough, and before it means an
   //    oversized body could be parsed before ever being counted.
+  const globalStore = createRateLimitStore('global');
   app.use(
     rateLimit({
       windowMs: 60_000,
       limit: 120,
       standardHeaders: 'draft-8',
       legacyHeaders: false,
+      ...(globalStore ? { store: globalStore } : {}),
     }),
   );
 

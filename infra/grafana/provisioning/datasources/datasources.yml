@@ -32,3 +32,15 @@ datasources:
       sslmode: disable
       postgresVersion: 1600
       timescaledb: false
+
+  # Closes the "no log aggregation" finding from the production-readiness
+  # audit: previously `docker logs bankops-api` on whichever single
+  # container happened to be running was the entire incident-investigation
+  # toolkit, and that history vanished the moment the container was
+  # recreated (which happened, unprompted, earlier this same project).
+  - name: Loki
+    type: loki
+    access: proxy
+    uid: loki
+    url: http://loki:3100
+    editable: false

@@ -10,7 +10,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bankops}
       POSTGRES_DB: ${POSTGRES_DB:-bankops}
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      # Host-side port only — every other service reaches Postgres via the
+      # internal Docker network at postgres:5432 regardless of this value.
+      # This exists only so host-level tools (`prisma migrate dev`, a local
+      # psql) can reach it too, and 5432 is not reliably free on this host
+      # (a native Windows Postgres service intermittently holds it).
+      - '${POSTGRES_PORT:-5433}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,6 +24,30 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks:
+      - bankops
+
+  # One-shot: runs `prisma migrate deploy` to completion, then exits.
+  # Previously this ran inline in every api replica's own CMD — with more
+  # than one replica that meant N concurrent migration attempts racing on
+  # Prisma's advisory lock, and no separation between "the schema changed"
+  # and "this replica is healthy". `api` now waits on this service
+  # completing successfully instead of migrating itself.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: bankops-migrate
+    restart: 'no'
+    env_file:
+      - apps/api/.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bankops}:${POSTGRES_PASSWORD:-bankops}@postgres:5432/${POSTGRES_DB:-bankops}?schema=public
+    entrypoint: ['npm', 'run', 'db:migrate', '-w', '@bankops/api']
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - bankops
 
@@ -36,10 +65,20 @@ services:
       API_PORT: 4000
       DATABASE_URL: postgresql://${POSTGRES_USER:-bankops}:${POSTGRES_PASSWORD:-bankops}@postgres:5432/${POSTGRES_DB:-bankops}?schema=public
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      # The compose "production" profile previously never overrode the
+      # .env default (false) here — the session cookie could travel over
+      # plain HTTP in the profile explicitly labeled production. The app
+      # now also refuses to boot with NODE_ENV=production and this false.
+      COOKIE_SECURE: 'true'
+      RATE_LIMIT_REDIS_URL: redis://redis:6379
     ports:
       - '${API_PORT:-4000}:4000'
     depends_on:
       postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
         condition: service_healthy
     # /health always answers 200 by design (see apps/api's Dockerfile note);
     # /ready is the one that fails non-200 when the database is down.
@@ -49,6 +88,46 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    networks:
+      - bankops
+
+  redis:
+    image: redis:7-alpine
+    container_name: bankops-redis
+    restart: unless-stopped
+    # Rate-limit counters only — losing them on restart just resets
+    # everyone's window early, which is safe, so no persistence volume.
+    command: ['redis-server', '--save', '']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - bankops
+
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:16-alpine
+    container_name: bankops-postgres-backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-bankops}
+      POSTGRES_USER: ${POSTGRES_USER:-bankops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bankops}
+      # Daily at 02:00, keep a rolling window per tier — see
+      # infra/backups/README.md for the restore procedure, which has
+      # actually been run end-to-end against this exact image, not just
+      # documented on faith.
+      SCHEDULE: '@daily'
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      - postgres_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - bankops
 
@@ -86,6 +165,49 @@ services:
       - '9090:9090'
     depends_on:
       - api
+      - alertmanager
+    networks:
+      - bankops
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: bankops-alertmanager
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./infra/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - '9093:9093'
+    networks:
+      - bankops
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: bankops-loki
+    restart: unless-stopped
+    command: ['-config.file=/etc/loki/loki-config.yml']
+    volumes:
+      - ./infra/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    ports:
+      - '3100:3100'
+    networks:
+      - bankops
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: bankops-promtail
+    restart: unless-stopped
+    command: ['-config.file=/etc/promtail/promtail-config.yml']
+    volumes:
+      - ./infra/loki/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
     networks:
       - bankops
 
@@ -111,12 +233,16 @@ services:
       - '3001:3000'
     depends_on:
       - prometheus
+      - loki
     networks:
       - bankops
 
 volumes:
   postgres_data:
+  postgres_backups:
   prometheus_data:
+  alertmanager_data:
+  loki_data:
   grafana_data:
 
 networks:

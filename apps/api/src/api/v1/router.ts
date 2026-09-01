@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { createAlertmanagerWebhookRouter } from '../../modules/alerting/alertmanager-webhook.router.js';
 import { createAlertsRouter } from '../../modules/alerts/alerts.router.js';
 import { auditRouter } from '../../modules/audit/audit.router.js';
 import { authRouter } from '../../modules/auth/auth.router.js';
@@ -38,6 +39,9 @@ export function createV1Router(): Router {
   const router = Router();
 
   router.use(healthRouter);
+  // Unauthenticated (no BankOps user concept applies to Alertmanager) but
+  // guarded by its own shared secret — see alertmanager-webhook.router.ts.
+  router.use('/internal/alerts', createAlertmanagerWebhookRouter());
   router.use('/auth', authRouter);
   router.use('/users', usersRouter);
   router.use('/services', createServicesRouter());

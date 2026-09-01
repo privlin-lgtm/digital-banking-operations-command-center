@@ -210,6 +210,47 @@ new client.Gauge({
   },
 });
 
+/**
+ * Counts notifications actually received from Alertmanager — the delivery
+ * side of alerting, not just the rule-evaluation side. Answers "is
+ * anything actually reaching a human" as its own observable signal,
+ * separate from bankops_incidents_open_total et al., which only prove a
+ * rule evaluated true inside Prometheus.
+ */
+const alertNotifications = new client.Counter({
+  name: 'bankops_alert_notifications_total',
+  help: 'Alert notifications received from Alertmanager, by severity and status',
+  labelNames: ['severity', 'status'] as const,
+  registers: [register],
+});
+
+export function recordAlertNotification(severity: string, status: string): void {
+  alertNotifications.inc({ severity, status });
+}
+
+/**
+ * Unix timestamp of each scheduled job's last successful run. A silent
+ * no-op (e.g. the system-actor lookup failing) previously showed up only
+ * as a single warn-level log line nobody was watching — this turns that
+ * into a gauge that can go stale and be alerted on, per the production-
+ * readiness audit's scheduler-health finding.
+ */
+const schedulerLastSuccess = new client.Gauge({
+  name: 'bankops_scheduler_last_success_timestamp',
+  help: "Unix timestamp (seconds) of each scheduled job's last successful run",
+  // Named scheduler_job, not job: Prometheus attaches its own `job` label
+  // (from prometheus.yml's job_name) to every scraped metric automatically
+  // — the exact same collision class as bank_service above, caught this
+  // time by actually querying Prometheus after wiring it up rather than
+  // trusting the metric name in isolation.
+  labelNames: ['scheduler_job'] as const,
+  registers: [register],
+});
+
+export function recordSchedulerSuccess(jobName: string): void {
+  schedulerLastSuccess.set({ scheduler_job: jobName }, Date.now() / 1000);
+}
+
 export function metricsMiddleware(): RequestHandler {
   return (req, res, next) => {
     const end = httpDuration.startTimer();

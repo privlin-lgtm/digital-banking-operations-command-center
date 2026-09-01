@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { REMEDIATION_ACTIONS } from '../remediation/remediation.types.js';
 
 const stateValues = ['FIRING', 'ACKNOWLEDGED', 'RESOLVED'] as const;
 const severityValues = ['SEV1', 'SEV2', 'SEV3', 'SEV4'] as const;
@@ -18,6 +19,10 @@ export const createAlertRuleSchema = z
     highThreshold: z.number().optional(),
     mediumThreshold: z.number().optional(),
     lowThreshold: z.number().optional(),
+    // Opt-in, auto-invoked the first time this rule fires SEV1 — see
+    // AlertsService.evaluateMetric. Validated against the real action set
+    // here rather than trusted as an arbitrary string.
+    autoRemediateAction: z.enum(REMEDIATION_ACTIONS).optional(),
   })
   .refine(
     (data) =>
@@ -36,6 +41,7 @@ export const updateAlertRuleSchema = z
     mediumThreshold: z.number().optional(),
     lowThreshold: z.number().optional(),
     isActive: z.boolean().optional(),
+    autoRemediateAction: z.enum(REMEDIATION_ACTIONS).nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field must be provided',

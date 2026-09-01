@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import { createRateLimitStore } from '../../lib/rate-limit-store.js';
 import { authenticate } from '../../middleware/authenticate.js';
 import { loginHandler, logoutHandler, meHandler } from './auth.controller.js';
 
@@ -11,12 +12,14 @@ export const authRouter = Router();
 // budget on top of it, keyed the same way (by IP), since this is the one
 // endpoint where "a burst of requests" specifically means "a burst of
 // guesses against someone's password."
+const loginRateLimitStore = createRateLimitStore('login');
 const loginLimiter = rateLimit({
   windowMs: 15 * 60_000,
   limit: 10,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { error: { code: 'RATE_LIMITED', message: 'Too many login attempts, try again later' } },
+  ...(loginRateLimitStore ? { store: loginRateLimitStore } : {}),
 });
 
 authRouter.post('/login', loginLimiter, loginHandler);

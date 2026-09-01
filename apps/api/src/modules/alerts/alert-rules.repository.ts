@@ -35,6 +35,9 @@ export class PrismaAlertRulesRepository implements AlertRulesRepository {
         ...(input.highThreshold !== undefined ? { highThreshold: input.highThreshold } : {}),
         ...(input.mediumThreshold !== undefined ? { mediumThreshold: input.mediumThreshold } : {}),
         ...(input.lowThreshold !== undefined ? { lowThreshold: input.lowThreshold } : {}),
+        ...(input.autoRemediateAction !== undefined
+          ? { autoRemediateAction: input.autoRemediateAction }
+          : {}),
       },
     });
   }
@@ -51,6 +54,9 @@ export class PrismaAlertRulesRepository implements AlertRulesRepository {
         ...(input.mediumThreshold !== undefined ? { mediumThreshold: input.mediumThreshold } : {}),
         ...(input.lowThreshold !== undefined ? { lowThreshold: input.lowThreshold } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        ...(input.autoRemediateAction !== undefined
+          ? { autoRemediateAction: input.autoRemediateAction }
+          : {}),
       },
     });
   }

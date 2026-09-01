@@ -3,7 +3,9 @@ import type { Alert } from '@prisma/client';
 import type { Logger } from 'pino';
 import type { AuditLogger } from '../audit/audit-logger.js';
 import { ConflictError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { isRemediationActionType } from '../remediation/remediation.types.js';
 import type { IncidentCreator } from './incident-creator.js';
+import type { RemediationTrigger } from './remediation-trigger.js';
 import type { ThresholdEvaluator } from './threshold-evaluator.js';
 import type {
   AlertRulesRepository,
@@ -22,6 +24,7 @@ export class AlertsService {
     private readonly rulesRepository: AlertRulesRepository,
     private readonly incidentCreator: IncidentCreator,
     private readonly evaluator: ThresholdEvaluator,
+    private readonly remediationTrigger: RemediationTrigger,
     private readonly auditLogger: AuditLogger,
     private readonly logger: Logger,
   ) {}
@@ -152,6 +155,7 @@ export class AlertsService {
     // severity change on an alert that's already open doesn't need a
     // second incident, and an incident commander reclassifying severity
     // is the Incident module's own job from there.
+    let incidentId: string | undefined;
     if (!wasAlreadyFiring && AUTO_INCIDENT_SEVERITIES.has(severity) && !alert.incidentId) {
       const incident = await this.incidentCreator.create(
         {
@@ -163,14 +167,53 @@ export class AlertsService {
         actorId,
         actorRole,
       );
+      incidentId = incident.id;
       await this.alertsRepository.linkToIncident(alert.id, incident.id);
       this.logger.info(
         { alertId: alert.id, incidentId: incident.id },
         'Alert auto-created an incident',
       );
-      return this.alertsRepository.findById(alert.id) as Promise<Alert>;
     }
 
+    // Closes the "Automated Remediation Engine is never automatically
+    // triggered" P1 finding: opt-in per rule (autoRemediateAction), and
+    // deliberately narrow — only the transition into a brand-new SEV1
+    // firing, matching "at CRITICAL" from the audit's own recommendation.
+    // A severity that's already firing or that reclassifies down doesn't
+    // re-trigger; that would mean silently retrying an action whose first
+    // attempt's outcome nobody has looked at yet. Doesn't auto-resolve the
+    // incident even on SUCCESS — a human still confirms that, on purpose.
+    if (
+      !wasAlreadyFiring &&
+      severity === 'SEV1' &&
+      rule.autoRemediateAction &&
+      isRemediationActionType(rule.autoRemediateAction)
+    ) {
+      try {
+        const result = await this.remediationTrigger.execute(rule.autoRemediateAction, {
+          serviceId,
+          ...(incidentId ? { incidentId } : {}),
+          actorId,
+        });
+        this.logger.info(
+          { alertId: alert.id, action: rule.autoRemediateAction, outcome: result.outcome },
+          'Alert auto-triggered remediation',
+        );
+      } catch (error) {
+        // The remediation engine already records its own audit trail and
+        // failure handling internally — a thrown error here means invoking
+        // it failed outright (e.g. no executor registered), which is worth
+        // logging but must never take down alert evaluation itself.
+        this.logger.error(
+          { err: error, alertId: alert.id, action: rule.autoRemediateAction },
+          'Auto-triggered remediation failed to invoke',
+        );
+      }
+    }
+
+    if (incidentId) {
+      return this.alertsRepository.findById(alert.id) as Promise<Alert>;
+    }
     return alert;
   }
 

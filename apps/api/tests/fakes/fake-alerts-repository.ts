@@ -9,6 +9,8 @@ import type {
   UpdateAlertRuleInput,
 } from '../../src/modules/alerts/alerts.types.js';
 import type { IncidentCreator } from '../../src/modules/alerts/incident-creator.js';
+import type { RemediationTrigger } from '../../src/modules/alerts/remediation-trigger.js';
+import type { RemediationActionType } from '../../src/modules/remediation/remediation.types.js';
 
 let ruleCounter = 0;
 let alertCounter = 0;
@@ -25,6 +27,7 @@ export function makeAlertRule(overrides: Partial<AlertRule> = {}): AlertRule {
     highThreshold: overrides.highThreshold ?? 1000,
     mediumThreshold: overrides.mediumThreshold ?? 500,
     lowThreshold: overrides.lowThreshold ?? null,
+    autoRemediateAction: overrides.autoRemediateAction ?? null,
     isActive: overrides.isActive ?? true,
     createdById: overrides.createdById ?? 'user-1',
     createdAt: overrides.createdAt ?? now,
@@ -63,6 +66,7 @@ export class FakeAlertRulesRepository implements AlertRulesRepository {
       highThreshold: input.highThreshold ?? null,
       mediumThreshold: input.mediumThreshold ?? null,
       lowThreshold: input.lowThreshold ?? null,
+      autoRemediateAction: input.autoRemediateAction ?? null,
     });
     this.rows.set(rule.id, rule);
     return rule;
@@ -81,6 +85,9 @@ export class FakeAlertRulesRepository implements AlertRulesRepository {
       ...(input.mediumThreshold !== undefined ? { mediumThreshold: input.mediumThreshold } : {}),
       ...(input.lowThreshold !== undefined ? { lowThreshold: input.lowThreshold } : {}),
       ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      ...(input.autoRemediateAction !== undefined
+        ? { autoRemediateAction: input.autoRemediateAction }
+        : {}),
     };
     this.rows.set(id, updated);
     return updated;
@@ -177,6 +184,24 @@ export class FakeAlertsRepository implements AlertsRepository {
     const existing = this.rows.get(id);
     if (!existing) throw new Error(`FakeAlertsRepository: "${id}" not found`);
     return existing;
+  }
+}
+
+export class FakeRemediationTrigger implements RemediationTrigger {
+  readonly calls: Array<{
+    action: RemediationActionType;
+    serviceId?: string;
+    incidentId?: string;
+    actorId: string;
+  }> = [];
+  outcome: { outcome: string; detail: string } = { outcome: 'SUCCESS', detail: 'fake success' };
+
+  async execute(
+    action: RemediationActionType,
+    context: { serviceId?: string; incidentId?: string; actorId: string },
+  ): Promise<{ outcome: string; detail: string }> {
+    this.calls.push({ action, ...context });
+    return this.outcome;
   }
 }
 

@@ -8,6 +8,8 @@ export interface CreateAlertRuleInput {
   highThreshold?: number | undefined;
   mediumThreshold?: number | undefined;
   lowThreshold?: number | undefined;
+  /** A RemediationActionType (validated at the zod boundary) auto-invoked the first time this rule fires SEV1 — see AlertsService.evaluateMetric. Opt-in; null/absent means no auto-remediation. */
+  autoRemediateAction?: string | undefined;
   createdById: string;
 }
 
@@ -18,6 +20,7 @@ export interface UpdateAlertRuleInput {
   mediumThreshold?: number | undefined;
   lowThreshold?: number | undefined;
   isActive?: boolean | undefined;
+  autoRemediateAction?: string | null | undefined;
 }
 
 export interface ListAlertsFilter {

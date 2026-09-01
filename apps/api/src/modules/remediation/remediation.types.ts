@@ -8,6 +8,11 @@ export const REMEDIATION_ACTIONS = [
 
 export type RemediationActionType = (typeof REMEDIATION_ACTIONS)[number];
 
+/** Narrows a free-text value (e.g. AlertRule.autoRemediateAction, stored as a plain string so a new action ships as code, not a migration) to a real RemediationActionType. */
+export function isRemediationActionType(value: string): value is RemediationActionType {
+  return (REMEDIATION_ACTIONS as readonly string[]).includes(value);
+}
+
 export interface RemediationContext {
   serviceId?: string | undefined;
   incidentId?: string | undefined;

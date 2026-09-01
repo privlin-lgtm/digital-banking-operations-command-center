@@ -5,6 +5,7 @@ import { loadEnv } from './config/env.js';
 import { logger } from './config/logger.js';
 import { prisma } from './config/prisma.js';
 import { getContainer } from './container.js';
+import { recordSchedulerSuccess } from './config/metrics.js';
 import { resolveSystemActor } from './modules/incidents/system-actor.js';
 
 /**
@@ -16,6 +17,39 @@ import { resolveSystemActor } from './modules/incidents/system-actor.js';
  * IncidentEscalationService.runSweep's scaling note for the full
  * reasoning.
  */
+// Arbitrary, stable key — pg_try_advisory_lock's namespace is global to the
+// whole Postgres cluster, so this only has to avoid colliding with some
+// other lock this codebase takes elsewhere (nothing else does today).
+const FAILURE_SIMULATOR_LOCK_KEY = 947_201_001n;
+
+/**
+ * Unlike the escalation sweep and SLA rollup (idempotent by construction —
+ * see IncidentEscalationService.runSweep's doc comment), FailureSimulator's
+ * tick generates a new metric sample and unconditionally advances
+ * tickCount every call. Two replicas ticking the same simulation in the
+ * same interval would ramp it twice as fast and could double-fire the
+ * alert/incident it's meant to demonstrate — the gap flagged in the
+ * production-readiness audit. A Postgres advisory lock is visible across
+ * every replica's connection to the same database, so exactly one replica
+ * actually runs the tick per interval regardless of how many are running;
+ * the rest see `locked: false` and skip — which still counts as success
+ * for bankops_scheduler_last_success_timestamp, since "someone else has
+ * this" is the correct outcome, not a failure.
+ */
+async function withAdvisoryLock(lockKey: bigint, fn: () => Promise<void>): Promise<void> {
+  const rows = await prisma.$queryRaw<
+    { locked: boolean }[]
+  >`SELECT pg_try_advisory_lock(${lockKey}) AS locked`;
+  if (!rows[0]?.locked) {
+    return;
+  }
+  try {
+    await fn();
+  } finally {
+    await prisma.$queryRaw`SELECT pg_advisory_unlock(${lockKey})`;
+  }
+}
+
 function startScheduledJob(
   jobName: string,
   envVarName: string,
@@ -42,6 +76,7 @@ function startScheduledJob(
       }
       try {
         await run(actor);
+        recordSchedulerSuccess(jobName);
       } catch (error) {
         jobLogger.error({ err: error }, `${jobName} failed`);
       }
@@ -94,7 +129,10 @@ async function main(): Promise<void> {
       'FAILURE_SIMULATOR_TICK_INTERVAL_MS',
       env.FAILURE_SIMULATOR_TICK_INTERVAL_MS,
       env.SYSTEM_ACTOR_EMAIL,
-      (actor) => failureSimulator.service.tick(actor.id, actor.role),
+      (actor) =>
+        withAdvisoryLock(FAILURE_SIMULATOR_LOCK_KEY, () =>
+          failureSimulator.service.tick(actor.id, actor.role),
+        ),
     ),
   ].filter((timer): timer is NodeJS.Timeout => timer !== undefined);
 

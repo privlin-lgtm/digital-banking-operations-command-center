@@ -192,6 +192,26 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
   );
   const incidentsController = new IncidentsController(incidentsService);
 
+  // Built before AlertsService (which now depends on it — a SEV1 firing
+  // with an AlertRule.autoRemediateAction set invokes it directly, closing
+  // the "remediation engine is never automatically triggered" P1 finding)
+  // rather than in its previous spot after the alerts block.
+  const remediationExecutors: Partial<Record<RemediationActionType, RemediationExecutor>> = {
+    RESTART_SERVICE: new RestartServiceExecutor(servicesRepository),
+    RECONNECT_DATABASE: new ReconnectDatabaseExecutor(deps.prisma),
+    CLEAR_CACHE: new ClearCacheExecutor(),
+    RETRY_OPERATION: new RetryOperationExecutor(),
+    FAILOVER_SIMULATION: new FailoverSimulationExecutor(),
+  };
+  const remediationEngine = new RemediationEngine(
+    remediationExecutors,
+    servicesRepository,
+    incidentsService,
+    auditLogger,
+    deps.logger.child({ module: 'remediation' }),
+  );
+  const remediationController = new RemediationController(remediationEngine);
+
   // Alerts are wired here — after IncidentsService exists (the engine
   // auto-creates incidents for SEV1/SEV2 firings) and before
   // ServiceHealthController (which triggers evaluation on every recorded
@@ -204,6 +224,7 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
     alertRulesRepository,
     incidentsService,
     thresholdEvaluator,
+    remediationEngine,
     auditLogger,
     deps.logger.child({ module: 'alerts' }),
   );
@@ -224,22 +245,6 @@ export function buildContainer(deps: ContainerDeps): AppContainer {
     deps.logger.child({ module: 'incident-escalation' }),
   );
   const incidentEscalationController = new IncidentEscalationController(incidentEscalationService);
-
-  const remediationExecutors: Partial<Record<RemediationActionType, RemediationExecutor>> = {
-    RESTART_SERVICE: new RestartServiceExecutor(servicesRepository),
-    RECONNECT_DATABASE: new ReconnectDatabaseExecutor(deps.prisma),
-    CLEAR_CACHE: new ClearCacheExecutor(),
-    RETRY_OPERATION: new RetryOperationExecutor(),
-    FAILOVER_SIMULATION: new FailoverSimulationExecutor(),
-  };
-  const remediationEngine = new RemediationEngine(
-    remediationExecutors,
-    servicesRepository,
-    incidentsService,
-    auditLogger,
-    deps.logger.child({ module: 'remediation' }),
-  );
-  const remediationController = new RemediationController(remediationEngine);
 
   const runbooksRepository = new PrismaRunbooksRepository(deps.prisma);
   const incidentLookup = new PrismaIncidentLookup(deps.prisma);

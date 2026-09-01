@@ -304,6 +304,14 @@ model AlertRule {
   highThreshold     Float?
   mediumThreshold   Float?
   lowThreshold      Float?
+  // Free-text against RemediationEngine's REMEDIATION_ACTIONS (validated at
+  // the zod boundary, not an enum) — same reasoning as AuditLog.action: a
+  // new remediation action type ships as application code, not a schema
+  // migration. Null = no auto-remediation for this rule (the default —
+  // this is opt-in per rule, not a platform-wide behavior). Only ever
+  // consulted for a SEV1 (criticalThreshold-driven) firing transition; see
+  // AlertsService.evaluateMetric.
+  autoRemediateAction String?
   isActive          Boolean         @default(true)
   createdById       String
   createdBy         User            @relation(fields: [createdById], references: [id])

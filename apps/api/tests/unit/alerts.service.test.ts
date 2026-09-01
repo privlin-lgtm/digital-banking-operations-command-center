@@ -6,6 +6,7 @@ import {
   FakeAlertRulesRepository,
   FakeAlertsRepository,
   FakeIncidentCreator,
+  FakeRemediationTrigger,
   makeAlertRule,
 } from '../fakes/fake-alerts-repository.js';
 import { FakeAuditLogger } from '../fakes/fake-audit-logger.js';
@@ -15,6 +16,7 @@ describe('AlertsService', () => {
   let alertsRepository: FakeAlertsRepository;
   let rulesRepository: FakeAlertRulesRepository;
   let incidentCreator: FakeIncidentCreator;
+  let remediationTrigger: FakeRemediationTrigger;
   let auditLogger: FakeAuditLogger;
   let service: AlertsService;
 
@@ -22,12 +24,14 @@ describe('AlertsService', () => {
     alertsRepository = new FakeAlertsRepository();
     rulesRepository = new FakeAlertRulesRepository();
     incidentCreator = new FakeIncidentCreator();
+    remediationTrigger = new FakeRemediationTrigger();
     auditLogger = new FakeAuditLogger();
     service = new AlertsService(
       alertsRepository,
       rulesRepository,
       incidentCreator,
       new ThresholdEvaluator(),
+      remediationTrigger,
       auditLogger,
       createSilentLogger(),
     );
@@ -182,6 +186,72 @@ describe('AlertsService', () => {
         'RESPONDER',
       );
       expect(result).toBeNull();
+    });
+
+    it('auto-triggers remediation on a brand-new SEV1 firing when the rule opts in', async () => {
+      rulesRepository.seed(
+        makeAlertRule({
+          serviceId: 'svc-1',
+          metricName: 'latency_p99',
+          criticalThreshold: 2000,
+          autoRemediateAction: 'RESTART_SERVICE',
+        }),
+      );
+      const alert = await service.evaluateMetric(
+        'svc-1',
+        'latency_p99',
+        5000,
+        'user-1',
+        'RESPONDER',
+      );
+
+      expect(remediationTrigger.calls).toHaveLength(1);
+      expect(remediationTrigger.calls[0]).toMatchObject({
+        action: 'RESTART_SERVICE',
+        serviceId: 'svc-1',
+        incidentId: 'inc-1',
+        actorId: 'user-1',
+      });
+      // Does not auto-resolve the incident just because remediation reported
+      // success — a human still confirms that, on purpose.
+      expect(alert?.state).toBe('FIRING');
+    });
+
+    it('does not auto-trigger remediation when the rule has no autoRemediateAction', async () => {
+      rulesRepository.seed(
+        makeAlertRule({ serviceId: 'svc-1', metricName: 'latency_p99', criticalThreshold: 2000 }),
+      );
+      await service.evaluateMetric('svc-1', 'latency_p99', 5000, 'user-1', 'RESPONDER');
+      expect(remediationTrigger.calls).toHaveLength(0);
+    });
+
+    it('does not re-trigger remediation when an already-firing SEV1 alert re-fires', async () => {
+      rulesRepository.seed(
+        makeAlertRule({
+          serviceId: 'svc-1',
+          metricName: 'latency_p99',
+          criticalThreshold: 2000,
+          autoRemediateAction: 'RESTART_SERVICE',
+        }),
+      );
+      await service.evaluateMetric('svc-1', 'latency_p99', 5000, 'user-1', 'RESPONDER');
+      await service.evaluateMetric('svc-1', 'latency_p99', 6000, 'user-1', 'RESPONDER');
+
+      expect(remediationTrigger.calls).toHaveLength(1);
+    });
+
+    it('does not trigger remediation for a SEV3 breach even if the rule opts in', async () => {
+      rulesRepository.seed(
+        makeAlertRule({
+          serviceId: 'svc-1',
+          metricName: 'latency_p99',
+          criticalThreshold: 2000,
+          mediumThreshold: 500,
+          autoRemediateAction: 'RESTART_SERVICE',
+        }),
+      );
+      await service.evaluateMetric('svc-1', 'latency_p99', 600, 'user-1', 'RESPONDER');
+      expect(remediationTrigger.calls).toHaveLength(0);
     });
   });
 

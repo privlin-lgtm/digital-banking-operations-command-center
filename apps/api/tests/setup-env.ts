@@ -5,3 +5,4 @@ process.env.FRONTEND_ORIGIN ??= 'http://localhost:3000';
 process.env.JWT_SECRET ??= 'test-secret-must-be-at-least-32-chars';
 process.env.JWT_EXPIRES_IN ??= '15m';
 process.env.COOKIE_SECURE ??= 'false';
+process.env.ALERTMANAGER_WEBHOOK_SECRET ??= 'test-alertmanager-webhook-secret';
