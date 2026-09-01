@@ -19,6 +19,8 @@ export function makeService(overrides: Partial<Service> = {}): Service {
     ownerTeam: overrides.ownerTeam ?? 'Team',
     status: overrides.status ?? 'UNKNOWN',
     archivedAt: overrides.archivedAt ?? null,
+    complianceScope: overrides.complianceScope ?? [],
+    dataClassification: overrides.dataClassification ?? 'INTERNAL',
     createdAt: overrides.createdAt ?? now,
     updatedAt: overrides.updatedAt ?? now,
   };

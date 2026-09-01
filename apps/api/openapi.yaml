@@ -1,0 +1,730 @@
+openapi: 3.0.3
+info:
+  title: BankOps Control Center API
+  version: '1.0'
+  description: |
+    Incident management, alerting, SLA/error-budget tracking, root-cause
+    analysis, runbooks, and chaos-engineering for a simulated bank's
+    service fleet — see `docs/architecture/adr/0003-simulated-fleet-not-real-microservices.md`
+    for what "simulated" means here.
+
+    **Scope note**: this contract enumerates every real route, its
+    authentication requirement, and the role gate on each write operation
+    — verified against the actual router files, not hand-typed from memory
+    (the README's own route table drifted out of sync with the real
+    surface before this contract replaced it). Response bodies use the
+    platform's two generic envelopes (`DataEnvelope`, `ErrorResponse`)
+    rather than a fully-modeled schema per entity — the fields returned
+    match the corresponding Prisma model in `apps/api/prisma/schema.prisma`,
+    which is the source of truth for exact shapes.
+
+    Served interactively at `GET /api/v1/docs` (Swagger UI) by the running API.
+  license:
+    name: UNLICENSED — internal use only
+servers:
+  - url: /api/v1
+tags:
+  - name: Health
+    description: Liveness/readiness/health probes and the Prometheus scrape endpoint. All public.
+  - name: Auth
+    description: Login/logout/session.
+  - name: Users
+    description: User directory. ADMIN only.
+  - name: Services
+    description: The service catalog — the 12-service simulated fleet plus any real entries.
+  - name: Service Dependencies
+    description: The dependency graph between services, used for blast-radius analysis.
+  - name: Service Metrics
+    description: Raw metric ingest and per-service health snapshots.
+  - name: Incidents
+    description: The incident command workflow — open, acknowledge, mitigate, resolve, close.
+  - name: Alerts
+    description: Threshold-driven alerts and the AlertRule configuration that drives them.
+  - name: Remediation
+    description: The resilience-wrapped remediation action executor and its circuit-breaker states.
+  - name: Runbooks
+    description: Versioned runbooks and their execution history against incidents.
+  - name: SLA
+    description: Error-budget / SLA rollups, computed by the pure SlaCalculator.
+  - name: RCA
+    description: Root-cause analysis reports and their corrective actions, four-eyes reviewed.
+  - name: Failure Simulator
+    description: Chaos-engineering fault injection, feeding the real alert-evaluation path.
+  - name: Audit Log
+    description: The platform-wide, append-only "who did what" record. ADMIN only.
+  - name: Internal
+    description: Not part of the public contract — infrastructure webhooks.
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: bankops_access
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    webhookSecret:
+      type: http
+      scheme: bearer
+      description: Shared secret configured identically in ALERTMANAGER_WEBHOOK_SECRET and alertmanager.yml — see ADR-0007.
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    serviceId:
+      name: serviceId
+      in: path
+      required: true
+      schema: { type: string }
+    incidentId:
+      name: incidentId
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    DataEnvelope:
+      type: object
+      description: The platform's standard success envelope. `data` is a single object or an array depending on the operation — see the corresponding Prisma model for its exact shape.
+      properties:
+        data: {}
+    PaginatedAuditLog:
+      allOf:
+        - $ref: '#/components/schemas/DataEnvelope'
+        - type: object
+          properties:
+            nextCursor:
+              type: string
+              nullable: true
+              description: Pass as `cursor` on the next request; null means this was the last page.
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    Unauthorized:
+      description: Missing or invalid session.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } }
+    Forbidden:
+      description: Authenticated, but the role gate on this operation rejected it.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } }
+    NotFound:
+      description: No row matches the given id.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } }
+    ValidationError:
+      description: Zod schema validation failed on the request body/query/params.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } }
+
+paths:
+  /live:
+    get:
+      tags: [Health]
+      summary: Liveness — is the process alive at all
+      security: []
+      responses: { '200': { description: Alive } }
+  /ready:
+    get:
+      tags: [Health]
+      summary: Readiness — can this instance serve traffic (checks the database)
+      security: []
+      responses:
+        '200': { description: Ready }
+        '500': { description: Database unreachable — take this instance out of rotation }
+  /health:
+    get:
+      tags: [Health]
+      summary: Human-facing rollup — always 200, reports "degraded" in the body
+      security: []
+      responses: { '200': { description: Rollup of database/services/incidents/SLA state } }
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus scrape endpoint (OpenMetrics text format)
+      security: []
+      responses: { '200': { description: Metrics in Prometheus text exposition format } }
+
+  /internal/alerts/webhook:
+    post:
+      tags: [Internal]
+      summary: Alertmanager notification receiver — see ADR-0007
+      security: [{ webhookSecret: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, description: 'Alertmanager v4 webhook payload' }
+      responses:
+        '200': { description: Notifications logged and counted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in — sets the bankops_access httpOnly cookie and returns the token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties: { email: { type: string }, password: { type: string } }
+      responses:
+        '200': { description: 'Authenticated' }
+        '401':
+          {
+            description: 'Invalid credentials (timing-safe — see docs/SECURITY_AND_READINESS_REVIEW.md)',
+          }
+        '429':
+          {
+            description: 'Rate limited — 10 attempts / 15 min, shared via Redis across replicas when configured',
+          }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out
+      responses: { '200': { description: Logged out } }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current session's user
+      responses: { '200': { description: The authenticated user } }
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: 'Requires: ADMIN'
+      responses:
+        '200':
+          {
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } },
+          }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /services:
+    get:
+      tags: [Services]
+      summary: List services (the catalog)
+      responses:
+        {
+          '200':
+            {
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } },
+            },
+        }
+    post:
+      tags: [Services]
+      summary: Register a service
+      description: 'Requires: ADMIN or COMMANDER'
+      responses:
+        '201': { description: Created }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /services/{id}:
+    get:
+      tags: [Services]
+      summary: Get a service by id
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      tags: [Services]
+      summary: Update a service
+      description: 'Requires: ADMIN or COMMANDER'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        { '200': { description: Updated }, '403': { $ref: '#/components/responses/Forbidden' } }
+    delete:
+      tags: [Services]
+      summary: Archive a service (soft — see ADR-0001, never a hard delete)
+      description: 'Requires: ADMIN. Blocked while anything still depends on this service or has an open incident against it.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        {
+          '200': { description: Archived },
+          '403': { $ref: '#/components/responses/Forbidden' },
+          '409': { description: Blocked by a dependent service or open incident },
+        }
+  /services/{id}/status:
+    patch:
+      tags: [Services]
+      summary: Flip a service's status (HEALTHY/DEGRADED/CRITICAL/MAINTENANCE)
+      description: 'Requires: ADMIN, COMMANDER, or RESPONDER'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Updated } }
+
+  /services/{id}/dependencies:
+    get:
+      tags: [Service Dependencies]
+      summary: List this service's upstream dependencies
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Service Dependencies]
+      summary: Add a dependency edge
+      description: 'Requires: ADMIN or COMMANDER'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: Created } }
+  /services/{id}/dependencies/dependents:
+    get:
+      tags: [Service Dependencies]
+      summary: List services that depend on this one
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+  /services/{id}/dependencies/blast-radius:
+    get:
+      tags: [Service Dependencies]
+      summary: Every service transitively affected if this one goes down
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+  /services/{id}/dependencies/{dependencyId}:
+    delete:
+      tags: [Service Dependencies]
+      summary: Remove a dependency edge
+      description: 'Requires: ADMIN or COMMANDER'
+      parameters:
+        - { $ref: '#/components/parameters/id' }
+        - { name: dependencyId, in: path, required: true, schema: { type: string } }
+      responses: { '200': { description: Removed } }
+
+  /services/{id}/metrics:
+    get:
+      tags: [Service Metrics]
+      summary: List recorded metric samples for a service
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Service Metrics]
+      summary: Record a metric sample (the monitoring-agent ingest path)
+      description: 'Requires: ADMIN, COMMANDER, or RESPONDER. Recording a sample synchronously triggers AlertsService.evaluateMetric — no separate polling loop.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: Recorded and evaluated } }
+  /services/{id}/metrics/health:
+    get:
+      tags: [Service Metrics]
+      summary: Current health snapshot derived from recent metric samples
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+
+  /incidents:
+    get:
+      tags: [Incidents]
+      summary: List incidents (filterable by status/severity)
+      responses:
+        {
+          '200':
+            {
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } },
+            },
+        }
+    post:
+      tags: [Incidents]
+      summary: Open an incident
+      description: 'Requires: RESPONDER or above'
+      responses:
+        {
+          '201': { description: Created },
+          '422': { $ref: '#/components/responses/ValidationError' },
+        }
+  /incidents/escalations/sweep:
+    post:
+      tags: [Incidents]
+      summary: Manually trigger the escalation sweep (normally scheduled — see ADR-0008)
+      description: 'Requires: ADMIN'
+      responses: { '200': { description: Sweep results } }
+  /incidents/{id}:
+    get:
+      tags: [Incidents]
+      summary: Get an incident by id
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/NotFound' } }
+  /incidents/{id}/timeline:
+    get:
+      tags: [Incidents]
+      summary: The merged system + human timeline for an incident
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+  /incidents/{id}/escalation:
+    get:
+      tags: [Incidents]
+      summary: Dry-run preview — what would the next escalation sweep do to this incident
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+  /incidents/{id}/severity:
+    patch:
+      tags: [Incidents]
+      summary: Reclassify severity
+      description: 'Requires: COMMANDER or ADMIN'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Updated } }
+  /incidents/{id}/assign:
+    post:
+      tags: [Incidents]
+      summary: Assign (or self-claim) the commander
+      description: 'Requires: RESPONDER or above. RESPONDER may only self-claim.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Assigned } }
+  /incidents/{id}/acknowledge:
+    post:
+      tags: [Incidents]
+      summary: Acknowledge
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Acknowledged } }
+  /incidents/{id}/mitigate:
+    post:
+      tags: [Incidents]
+      summary: Mark mitigated
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Mitigated } }
+  /incidents/{id}/resolve:
+    post:
+      tags: [Incidents]
+      summary: Resolve
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Resolved } }
+  /incidents/{id}/close:
+    post:
+      tags: [Incidents]
+      summary: Close
+      description: 'Requires: COMMANDER or ADMIN. Blocked for SEV1/SEV2 without an APPROVED RcaReport — see requiresRcaToClose in severity.ts.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        {
+          '200': { description: Closed },
+          '409': { description: 'Blocked: RCA required and not yet approved' },
+        }
+  /incidents/{id}/reopen:
+    post:
+      tags: [Incidents]
+      summary: Reopen a closed incident
+      description: 'Requires: COMMANDER or ADMIN'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Reopened } }
+  /incidents/{id}/comments:
+    get:
+      tags: [Incidents]
+      summary: List comments
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Incidents]
+      summary: Add a comment
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: Created } }
+
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: List alerts (filterable by service/state/severity)
+      responses:
+        {
+          '200':
+            {
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } },
+            },
+        }
+  /alerts/{id}:
+    get:
+      tags: [Alerts]
+      summary: Get an alert by id
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+  /alerts/{id}/acknowledge:
+    post:
+      tags: [Alerts]
+      summary: Acknowledge
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Acknowledged } }
+  /alerts/{id}/resolve:
+    post:
+      tags: [Alerts]
+      summary: Resolve
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Resolved } }
+  /alerts/rules/{serviceId}:
+    get:
+      tags: [Alerts]
+      summary: List alert rules for a service
+      parameters: [{ $ref: '#/components/parameters/serviceId' }]
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Alerts]
+      summary: Create an alert rule
+      description: 'Requires: COMMANDER or ADMIN. Optional autoRemediateAction auto-invokes the Remediation Engine on a brand-new SEV1 firing — see ADR-0007 and the Remediation tag.'
+      parameters: [{ $ref: '#/components/parameters/serviceId' }]
+      responses:
+        {
+          '201': { description: Created },
+          '409': { description: 'A rule already exists for this service+metric' },
+        }
+  /alerts/rules/{serviceId}/{id}:
+    patch:
+      tags: [Alerts]
+      summary: Update an alert rule
+      description: 'Requires: COMMANDER or ADMIN'
+      parameters:
+        - { $ref: '#/components/parameters/serviceId' }
+        - { $ref: '#/components/parameters/id' }
+      responses: { '200': { description: Updated } }
+
+  /remediation/circuit-breakers:
+    get:
+      tags: [Remediation]
+      summary: Current circuit-breaker state per remediation action type
+      responses: { '200': { description: OK } }
+  /remediation/execute:
+    post:
+      tags: [Remediation]
+      summary: Manually invoke a remediation action
+      description: |
+        Requires: RESPONDER or above. This is the manual trigger path — see
+        ADR-0007's note that automated triggering only happens via
+        AlertRule.autoRemediateAction on a new SEV1 firing, not from here.
+      responses:
+        {
+          '200':
+            {
+              description: Executed (outcome may be SUCCESS,
+              FALLBACK,
+              or FAILURE — all three are 200s,
+              the outcome is in the body)',
+            },
+        }
+
+  /runbooks:
+    get:
+      tags: [Runbooks]
+      summary: Search runbooks
+      responses:
+        {
+          '200':
+            {
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } },
+            },
+        }
+    post:
+      tags: [Runbooks]
+      summary: Create a runbook
+      description: 'Requires: COMMANDER or ADMIN'
+      responses: { '201': { description: Created } }
+  /runbooks/{id}:
+    get:
+      tags: [Runbooks]
+      summary: Get a runbook by id
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+    patch:
+      tags: [Runbooks]
+      summary: Update a runbook (bumps version — see Runbook.version)
+      description: 'Requires: COMMANDER or ADMIN'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Updated } }
+  /runbooks/{id}/link:
+    post:
+      tags: [Runbooks]
+      summary: Link a runbook to an incident (record that it's being run)
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: Linked } }
+  /runbooks/links/{linkId}/outcome:
+    patch:
+      tags: [Runbooks]
+      summary: Record the outcome of a runbook execution
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ name: linkId, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Recorded } }
+  /runbooks/incidents/{incidentId}/links:
+    get:
+      tags: [Runbooks]
+      summary: List runbook executions linked to an incident
+      parameters: [{ $ref: '#/components/parameters/incidentId' }]
+      responses: { '200': { description: OK } }
+
+  /sla/breaches:
+    get:
+      tags: [SLA]
+      summary: All services currently breaching, for a given window type
+      responses: { '200': { description: OK } }
+  /sla/services/{serviceId}/latest:
+    get:
+      tags: [SLA]
+      summary: Latest SLA record for a service and window type
+      parameters: [{ $ref: '#/components/parameters/serviceId' }]
+      responses: { '200': { description: OK } }
+  /sla/services/{serviceId}/history:
+    get:
+      tags: [SLA]
+      summary: SLA record history for a service
+      parameters: [{ $ref: '#/components/parameters/serviceId' }]
+      responses: { '200': { description: OK } }
+  /sla/services/{serviceId}/calculate:
+    post:
+      tags: [SLA]
+      summary: Recompute SLA for one service/window on demand
+      description: 'Requires: COMMANDER or ADMIN'
+      parameters: [{ $ref: '#/components/parameters/serviceId' }]
+      responses: { '200': { description: Recomputed } }
+  /sla/rollup:
+    post:
+      tags: [SLA]
+      summary: Manually trigger the SLA rollup (normally scheduled)
+      description: 'Requires: ADMIN'
+      responses: { '200': { description: Rolled up } }
+
+  /rca/open-actions:
+    get:
+      tags: [RCA]
+      summary: All open corrective actions across every RCA report
+      responses: { '200': { description: OK } }
+  /rca/incidents/{incidentId}:
+    get:
+      tags: [RCA]
+      summary: Get the RCA report for an incident
+      parameters: [{ $ref: '#/components/parameters/incidentId' }]
+      responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/NotFound' } }
+    post:
+      tags: [RCA]
+      summary: Create an RCA report for an incident
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/incidentId' }]
+      responses: { '201': { description: Created } }
+  /rca/incidents/{incidentId}/report:
+    get:
+      tags: [RCA]
+      summary: Generate a formatted RCA report document
+      parameters: [{ $ref: '#/components/parameters/incidentId' }]
+      responses: { '200': { description: OK } }
+  /rca/actions/{actionId}/complete:
+    post:
+      tags: [RCA]
+      summary: Mark a corrective action complete
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ name: actionId, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Completed } }
+  /rca/{id}:
+    get:
+      tags: [RCA]
+      summary: Get an RCA report by id
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+    patch:
+      tags: [RCA]
+      summary: Update an RCA report (draft editing)
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Updated } }
+  /rca/{id}/submit:
+    post:
+      tags: [RCA]
+      summary: Submit for review (DRAFT → IN_REVIEW)
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Submitted } }
+  /rca/{id}/approve:
+    post:
+      tags: [RCA]
+      summary: Approve (IN_REVIEW → APPROVED) — the four-eyes sign-off
+      description: 'Requires: COMMANDER or ADMIN. The reviewer must differ from the author.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Approved } }
+  /rca/{id}/actions:
+    get:
+      tags: [RCA]
+      summary: List corrective actions for an RCA report
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+    post:
+      tags: [RCA]
+      summary: Add a corrective action
+      description: 'Requires: RESPONDER or above'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '201': { description: Created } }
+
+  /failure-simulations:
+    get:
+      tags: [Failure Simulator]
+      summary: List simulations (filterable by service/active state)
+      responses:
+        {
+          '200':
+            {
+              content:
+                { application/json: { schema: { $ref: '#/components/schemas/DataEnvelope' } } },
+            },
+        }
+    post:
+      tags: [Failure Simulator]
+      summary: Start a chaos scenario against a service
+      description: "Requires: COMMANDER or ADMIN. Feeds the exact same record-then-evaluate path a real metrics agent uses — see the scenario generator's own doc comment."
+      responses:
+        {
+          '201': { description: Started },
+          '409': { description: 'This service already has a running simulation' },
+        }
+  /failure-simulations/{id}:
+    get:
+      tags: [Failure Simulator]
+      summary: Get a simulation by id
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+  /failure-simulations/{id}/stop:
+    post:
+      tags: [Failure Simulator]
+      summary: Stop a running simulation
+      description: 'Requires: COMMANDER or ADMIN'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: Stopped } }
+
+  /audit-logs:
+    get:
+      tags: [Audit Log]
+      summary: Cursor-paginated, filterable audit trail
+      description: 'Requires: ADMIN'
+      parameters:
+        - {
+            name: cursor,
+            in: query,
+            schema: { type: string },
+            description: 'The last id from the previous page',
+          }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, default: 50, minimum: 1, maximum: 200 },
+          }
+        - { name: actorId, in: query, schema: { type: string } }
+        - { name: entityType, in: query, schema: { type: string } }
+        - { name: action, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          {
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/PaginatedAuditLog' } } },
+          }
+        '403': { $ref: '#/components/responses/Forbidden' }

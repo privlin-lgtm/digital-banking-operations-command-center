@@ -1,6 +1,6 @@
 import type { PrismaClient, Severity, User } from '@prisma/client';
 import { requiresRcaToClose, severityPolicy } from '../../src/modules/incidents/severity.js';
-import { ARCHETYPES, SERVICES } from './config.js';
+import { ARCHETYPES, FLAGSHIP_EXTERNAL_REFS, SERVICES } from './config.js';
 import type { StoryBeat } from './narrative.js';
 import {
   contributingFactorsText,
@@ -176,6 +176,7 @@ export async function generateIncidents(
 
     const title = titleText(beat.archetype, textCtx);
     const resolutionSummary = resolvedAt ? resolutionSummaryText(beat.archetype, textCtx) : null;
+    const externalRefs = FLAGSHIP_EXTERNAL_REFS[beat.id];
 
     const incident = await prisma.incident.create({
       data: {
@@ -191,6 +192,12 @@ export async function generateIncidents(
         resolutionSummary,
         escalationLevel,
         lastEscalatedAt,
+        ...(externalRefs
+          ? {
+              externalTicketUrl: externalRefs.externalTicketUrl,
+              statusPageUrl: externalRefs.statusPageUrl,
+            }
+          : {}),
       },
     });
 

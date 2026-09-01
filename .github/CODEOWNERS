@@ -1,0 +1,25 @@
+# Every path needs an owner in a platform this many teams touch — see
+# CONTRIBUTING.md for how review works day to day. Ownership here mirrors
+# the ownerTeam field already recorded on each Service in the schema.
+
+*                                   @bankops/platform-engineering
+
+apps/api/src/modules/incidents/    @bankops/core-platform
+apps/api/src/modules/alerts/       @bankops/core-platform
+apps/api/src/modules/remediation/  @bankops/core-platform
+apps/api/src/modules/runbooks/     @bankops/core-platform
+apps/api/src/modules/sla/          @bankops/core-platform
+apps/api/src/modules/rca/          @bankops/core-platform
+
+apps/api/src/modules/auth/         @bankops/identity
+apps/api/src/modules/users/        @bankops/identity
+
+apps/api/src/modules/audit/        @bankops/compliance
+docs/                              @bankops/compliance
+
+infra/                             @bankops/platform-engineering
+.github/workflows/                 @bankops/platform-engineering
+
+apps/web/                          @bankops/digital-channels
+
+apps/api/prisma/schema.prisma      @bankops/core-platform @bankops/platform-engineering

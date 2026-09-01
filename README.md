@@ -1,213 +1,95 @@
 # BankOps Control Center
 
-Digital banking operations command platform: alerts, cases, customers, and payments — with an Express API, Next.js desk UI, PostgreSQL, and a Prometheus/Grafana observability stack.
+An incident-management and reliability-engineering platform: severity-tiered alerting, incident command, root-cause analysis, runbooks, SLA/error-budget tracking, and chaos engineering — operated against a simulated 12-service bank fleet with six months of realistic operational history.
 
-## Stack
+**Read this first**: [`docs/architecture/adr/0003-simulated-fleet-not-real-microservices.md`](docs/architecture/adr/0003-simulated-fleet-not-real-microservices.md). There is exactly one real deployable in this system — the API below, backed by one Postgres instance. The 12-service fleet is generated seed data standing in for a fleet this platform is built to _monitor_, not services this platform _is_.
 
-| Layer            | Technology                                     |
-| ---------------- | ---------------------------------------------- |
-| Frontend         | Next.js 15, React 19, TypeScript, Tailwind CSS |
-| Backend          | Express 5, TypeScript, Prisma, PostgreSQL      |
-| Shared contracts | `@bankops/shared` workspace package            |
-| Observability    | Prometheus, Grafana, `prom-client`             |
-| Tooling          | ESLint 9, Prettier, Husky, lint-staged, Vitest |
-| Runtime          | Docker Compose, Node.js 22+                    |
+## What's actually here
 
-## Repository layout
+| Layer          | What it is                                                                                                                                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **API**        | Express 5 + TypeScript + Prisma, one real deployable. Narrow-ports DI, no framework — see [ADR-0004](docs/architecture/adr/0004-narrow-ports-over-a-di-framework.md).                                                                             |
+| **Web**        | Next.js 15 operations console — real incident queue, alerts, services, runbooks, and SLA views against the live API.                                                                                                                              |
+| **Database**   | PostgreSQL. `apps/api/prisma/seed-history/` generates a deterministic six-month operational history: 12 services, a real dependency graph, ~57 incidents across 6 named failure archetypes, RCA reports, SLA rollups.                             |
+| **Monitoring** | Prometheus (the API's own live metrics) + a second Grafana dashboard reading Postgres directly for the simulated fleet's history — see [ADR-0005](docs/architecture/adr/0005-two-datasource-grafana-architecture.md).                             |
+| **Alerting**   | 9 Prometheus rules (golden signals, saturation, SLO burn-rate, scheduler health, business signals) delivered through Alertmanager to a webhook receiver on the API — see [ADR-0007](docs/architecture/adr/0007-alertmanager-webhook-receiver.md). |
+| **Logs**       | Loki + Promtail, queryable from the same Grafana instance.                                                                                                                                                                                        |
+| **Backups**    | Automated daily/weekly/monthly Postgres dumps with a restore procedure that's actually been run end to end — see [`infra/backups/README.md`](infra/backups/README.md).                                                                            |
+| **CD**         | Every push to `main`/`master` publishes a git-sha-tagged image to GHCR after CI passes.                                                                                                                                                           |
 
-```text
-.
-├── apps/
-│   ├── api/                 Express + Prisma API
-│   └── web/                 Next.js App Router UI
-├── packages/
-│   └── shared/              Cross-app enums and DTOs
-├── infra/
-│   ├── prometheus/          Scrape config
-│   └── grafana/             Provisioned datasource + dashboard
-├── docker-compose.yml
-├── docker-compose.dev.yml
-├── eslint.config.mjs
-├── .prettierrc.json
-├── tsconfig.base.json
-└── package.json             npm workspaces root
-```
+## API documentation
 
-## Prerequisites
+`GET /api/v1/docs` (Swagger UI) — the actual contract, generated from [`apps/api/openapi.yaml`](apps/api/openapi.yaml), covering every real route. This replaced a hand-maintained route table in this README that had quietly drifted out of sync with the code (missing five entire modules by the time anyone noticed) — see the contract itself for why that's the source of truth now, not this file.
 
-- Node.js 22 or newer (see `.nvmrc`)
-- npm 10+
-- Docker Desktop (PostgreSQL, Prometheus, Grafana, optional full stack)
-- Git
+## Architecture decisions
 
-## Exact initialization commands
+[`docs/architecture/adr/`](docs/architecture/adr/) — eight ADRs documenting real decisions already made in this codebase (soft archival over hard delete, the simulated-fleet scope boundary, the DI pattern, the two-datasource Grafana split, and more), written so the reasoning outlives whichever code comment it used to live in alone.
 
-Run these from the repository root. Git is already initialized in this folder.
-
-### 1. Environment files
-
-**PowerShell**
-
-```powershell
-cd "c:\Users\privlin\OneDrive\מסמכים\VSCode\Projects\digital-banking-operations-command-center"
-
-Copy-Item .env.example .env
-Copy-Item apps\api\.env.example apps\api\.env
-Copy-Item apps\web\.env.example apps\web\.env
-```
-
-**bash / zsh**
+## Quickstart
 
 ```bash
-cd digital-banking-operations-command-center
 cp .env.example .env
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 ```
 
-Replace `JWT_SECRET` and `GF_SECURITY_ADMIN_PASSWORD` before any non-local deployment.
+Generate a real `JWT_SECRET` and `ALERTMANAGER_WEBHOOK_SECRET` before doing anything else — the API refuses to boot with the placeholder values from `.env.example` (see [ADR-0002](docs/architecture/adr/0002-fail-closed-environment-validation.md)):
 
-### 2. Install workspace dependencies
+```bash
+openssl rand -hex 32   # -> JWT_SECRET
+openssl rand -hex 24   # -> ALERTMANAGER_WEBHOOK_SECRET (must match infra/alertmanager/alertmanager.yml)
+```
 
 ```bash
 npm install
-```
-
-This installs root tooling and every workspace (`@bankops/api`, `@bankops/web`, `@bankops/shared`).
-
-### 3. Start PostgreSQL
-
-```bash
 docker compose up -d postgres
-```
-
-Wait until the container is healthy:
-
-```bash
-docker compose ps
-```
-
-### 4. Generate the Prisma client and apply schema
-
-If you are creating the first migration on a fresh clone that already includes `prisma/migrations`:
-
-```bash
 npm run db:generate
 npm run db:migrate
-```
-
-If you are bootstrapping migrations yourself:
-
-```bash
-npm run db:generate
-npx prisma migrate dev --name init --schema apps/api/prisma/schema.prisma
-```
-
-### 5. Seed the operator account and sample records
-
-```bash
-npm run db:seed
-```
-
-Local seed operator (override via `apps/api/.env`):
-
-| Field    | Value                 |
-| -------- | --------------------- |
-| Email    | `oscar.d@example.net` |
-| Password | `ChangeMe!Admin1`     |
-
-### 6. Run the applications
-
-```bash
+npm run db:seed              # bootstrap operator account + a handful of hand-written fixtures
+npm run db:seed:history      # the full six-month history (apps/api/prisma/seed-history/)
 npm run dev
 ```
 
-- Web: http://localhost:3000
-- API health: http://localhost:4000/api/v1/health
-- API metrics: http://localhost:4000/api/v1/metrics
+- Web: http://localhost:3000 — sign in with the seed operator (`apps/api/.env` → `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD`)
+- API docs: http://localhost:4000/api/v1/docs
 
-### 7. Observability stack (optional)
-
-```bash
-docker compose up -d prometheus grafana
-```
-
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3001 (default admin / `admin` unless overridden)
-
-The **BankOps API** dashboard is provisioned automatically.
-
-### Full stack in Docker
+### Full observability stack
 
 ```bash
 docker compose up --build
 ```
 
-Hot-reload development overlay:
+Brings up Postgres, the API (migrations run as a one-shot step first — see [ADR-0008](docs/architecture/adr/0008-advisory-locks-for-scheduler-safety.md) for why that matters under multiple replicas), Redis (shared rate-limit counters), Prometheus, Alertmanager, Loki/Promtail, Grafana (both dashboards + Loki datasource provisioned), and the automated-backup sidecar.
+
+| Service      | URL                                                         |
+| ------------ | ----------------------------------------------------------- |
+| Grafana      | http://localhost:3001 (`admin` / `admin` unless overridden) |
+| Prometheus   | http://localhost:9090                                       |
+| Alertmanager | http://localhost:9093                                       |
+| Loki         | http://localhost:3100                                       |
+
+Verify the dashboards are actually showing data, not just that they loaded:
 
 ```bash
-npm run docker:dev
+node scripts/check-dashboards.mjs
 ```
 
 ## Everyday scripts
 
-| Command               | Purpose                  |
-| --------------------- | ------------------------ |
-| `npm run dev`         | API + web in parallel    |
-| `npm run lint`        | ESLint across workspaces |
-| `npm run typecheck`   | `tsc --noEmit`           |
-| `npm test`            | API Vitest suite         |
-| `npm run format`      | Prettier write           |
-| `npm run db:studio`   | Prisma Studio            |
-| `npm run docker:down` | Stop compose services    |
+| Command                               | Purpose                                                        |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `npm run dev`                         | API + web in parallel                                          |
+| `npm run lint` / `typecheck` / `test` | Same three gates CI runs                                       |
+| `npm run db:seed:history`             | Regenerate the six-month simulated fleet history               |
+| `node scripts/check-dashboards.mjs`   | Fail loudly if any Grafana panel is silently returning no data |
+| `npm run docker:dev`                  | Full stack with hot-reload bind mounts                         |
 
-## API surface
+## Known gaps
 
-| Method                  | Path                                                         | Auth                                           |
-| ----------------------- | ------------------------------------------------------------ | ---------------------------------------------- |
-| `GET`                   | `/api/v1/live`                                               | public (liveness)                              |
-| `GET`                   | `/api/v1/ready`                                              | public (readiness, DB ping)                    |
-| `GET`                   | `/api/v1/health`                                             | public (aggregate rollup)                      |
-| `GET`                   | `/api/v1/metrics`                                            | public (Prometheus scrape)                     |
-| `POST`                  | `/api/v1/auth/login`                                         | public                                         |
-| `POST`                  | `/api/v1/auth/logout`                                        | cookie / bearer                                |
-| `GET`                   | `/api/v1/auth/me`                                            | cookie / bearer                                |
-| `GET`                   | `/api/v1/users`                                              | `ADMIN`                                        |
-| `GET/POST/PATCH/DELETE` | `/api/v1/services[/:id]`                                     | authenticated (write: `ADMIN`/`COMMANDER`)     |
-| `GET/POST/DELETE`       | `/api/v1/services/:id/dependencies[/:depId]`                 | authenticated (write: `ADMIN`/`COMMANDER`)     |
-| `GET`                   | `/api/v1/services/:id/dependencies/blast-radius`             | authenticated                                  |
-| `GET/POST`              | `/api/v1/services/:id/metrics`                               | authenticated                                  |
-| `GET`                   | `/api/v1/services/:id/metrics/health`                        | authenticated                                  |
-| `GET/POST`              | `/api/v1/incidents`                                          | authenticated (create: `RESPONDER`+)           |
-| `GET`                   | `/api/v1/incidents/:id`                                      | authenticated                                  |
-| `PATCH`                 | `/api/v1/incidents/:id/severity`                             | `COMMANDER`/`ADMIN`                            |
-| `POST`                  | `/api/v1/incidents/:id/assign`                               | `RESPONDER`+ (self-claim only for `RESPONDER`) |
-| `POST`                  | `/api/v1/incidents/:id/acknowledge`, `/mitigate`, `/resolve` | `RESPONDER`+                                   |
-| `POST`                  | `/api/v1/incidents/:id/close`, `/reopen`                     | `COMMANDER`/`ADMIN`                            |
-| `GET/POST`              | `/api/v1/incidents/:id/comments`                             | authenticated (post: `RESPONDER`+)             |
-| `GET`                   | `/api/v1/incidents/:id/timeline`                             | authenticated                                  |
-| `GET`                   | `/api/v1/incidents/:id/escalation`                           | authenticated (dry-run preview)                |
-| `POST`                  | `/api/v1/incidents/escalations/sweep`                        | `ADMIN`                                        |
-| `GET`                   | `/api/v1/alerts`                                             | authenticated                                  |
-| `GET`                   | `/api/v1/audit-logs`                                         | authenticated                                  |
+Not hidden, tracked:
 
-Access tokens are issued as the `bankops_access` httpOnly cookie and are also returned in the login JSON for non-browser clients.
+- No real secrets manager (Vault or a cloud equivalent) — secrets are environment variables today.
+- No MFA on COMMANDER/ADMIN accounts.
+- `/api/v1/metrics` and `/api/v1/docs` are unauthenticated (see `docs/SECURITY_AND_READINESS_REVIEW.md`).
 
-## Engineering standards
-
-- Strict TypeScript (`strict`, `noUncheckedIndexedAccess`)
-- Workspace-shared contracts instead of duplicated enums
-- Request IDs on every response (`x-request-id`)
-- Structured logging (Pino) with secret redaction
-- Helmet, CORS allowlist, JSON body limit, rate limiting
-- Central `AppError` + Zod validation mapping
-- Graceful shutdown and container health checks
-- Multi-stage Dockerfiles, non-root runtime users
-- CI: format, lint, typecheck, test
-
-## Security notes
-
-- Never commit `.env` files
-- Rotate `JWT_SECRET` and Grafana credentials before shared environments
-- Metrics are unauthenticated on the local compose network; restrict them in production
-- Seed credentials are for local development only
+See `CONTRIBUTING.md` before opening a PR, and `SECURITY.md` to report a vulnerability.

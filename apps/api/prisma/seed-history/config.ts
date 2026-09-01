@@ -621,6 +621,68 @@ export interface AlertRuleDef {
   lowThreshold?: number | undefined;
 }
 
+export interface ComplianceProfile {
+  complianceScope: string[];
+  dataClassification: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED';
+}
+
+// Which regulatory regimes actually touch each service, and how sensitive
+// the data it handles is — two separate axes (a service can be PCI-DSS
+// scoped without being the most restrictive classification, and vice
+// versa). Grounded in what each service's own function actually is, not
+// applied uniformly — api-gateway is pure edge routing and carries no
+// compliance scope of its own, while core-banking-api and payments-gateway
+// are exactly the systems a real PCI-DSS/SOX audit would ask about first.
+export const SERVICE_COMPLIANCE: Record<string, ComplianceProfile> = {
+  'api-gateway': { complianceScope: [], dataClassification: 'INTERNAL' },
+  'auth-service': { complianceScope: ['SOX'], dataClassification: 'CONFIDENTIAL' },
+  'core-banking-api': { complianceScope: ['SOX'], dataClassification: 'RESTRICTED' },
+  'payments-gateway': { complianceScope: ['PCI_DSS', 'SOX'], dataClassification: 'RESTRICTED' },
+  'card-processing': { complianceScope: ['PCI_DSS'], dataClassification: 'RESTRICTED' },
+  'fraud-detection': { complianceScope: ['PCI_DSS'], dataClassification: 'CONFIDENTIAL' },
+  'ledger-sync': { complianceScope: ['SOX'], dataClassification: 'CONFIDENTIAL' },
+  'kyc-service': { complianceScope: ['AML', 'GDPR'], dataClassification: 'RESTRICTED' },
+  'mobile-bff': { complianceScope: ['GDPR'], dataClassification: 'CONFIDENTIAL' },
+  'notification-service': { complianceScope: ['GDPR'], dataClassification: 'INTERNAL' },
+  'reporting-batch': { complianceScope: ['SOX'], dataClassification: 'CONFIDENTIAL' },
+  'audit-ledger-archive': { complianceScope: ['SOX', 'GDPR'], dataClassification: 'RESTRICTED' },
+};
+
+// Real incidents accumulate links to every other tool a response actually
+// happens in. Keyed by StoryBeat.id — only the six flagship incidents get
+// these, so the ones actually used for interview demonstrations read as
+// things that happened inside a real tool ecosystem, not a closed
+// simulation with nothing pointing outward.
+export const FLAGSHIP_EXTERNAL_REFS: Record<
+  string,
+  { externalTicketUrl: string; statusPageUrl: string }
+> = {
+  'flagship-db-outage': {
+    externalTicketUrl: 'https://bankops.atlassian.net/browse/INFRA-4471',
+    statusPageUrl: 'https://status.bankops.internal/incidents/db-connection-pool-exhaustion',
+  },
+  'flagship-third-party-outage': {
+    externalTicketUrl: 'https://bankops.atlassian.net/browse/PAY-2208',
+    statusPageUrl: 'https://status.bankops.internal/incidents/correspondent-network-outage',
+  },
+  'flagship-deployment-failure': {
+    externalTicketUrl: 'https://bankops.atlassian.net/browse/CARD-1163',
+    statusPageUrl: 'https://status.bankops.internal/incidents/card-processing-elevated-errors',
+  },
+  'flagship-dependency-failure': {
+    externalTicketUrl: 'https://bankops.atlassian.net/browse/ID-3390',
+    statusPageUrl: 'https://status.bankops.internal/incidents/auth-service-degradation',
+  },
+  'flagship-latency-spike': {
+    externalTicketUrl: 'https://bankops.atlassian.net/browse/MOBILE-887',
+    statusPageUrl: 'https://status.bankops.internal/incidents/mobile-latency-month-end',
+  },
+  'flagship-memory-leak': {
+    externalTicketUrl: 'https://bankops.atlassian.net/browse/PLAT-5502',
+    statusPageUrl: 'https://status.bankops.internal/incidents/notification-service-restarts',
+  },
+};
+
 // Hand-picked, round-number thresholds — the way an ops team actually tunes
 // a rule, not a formula derived from the metric's random baseline range.
 export const ALERT_RULE_DEFS: AlertRuleDef[] = [

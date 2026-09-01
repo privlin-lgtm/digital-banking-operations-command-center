@@ -3,6 +3,7 @@ import { createAlertmanagerWebhookRouter } from '../../modules/alerting/alertman
 import { createAlertsRouter } from '../../modules/alerts/alerts.router.js';
 import { auditRouter } from '../../modules/audit/audit.router.js';
 import { authRouter } from '../../modules/auth/auth.router.js';
+import { createDocsRouter } from '../../modules/docs/docs.router.js';
 import { createFailureSimulatorRouter } from '../../modules/failure-simulator/failure-simulator.router.js';
 import { healthRouter } from '../../modules/health/health.router.js';
 import { createIncidentsRouter } from '../../modules/incidents/incidents.router.js';
@@ -39,6 +40,10 @@ export function createV1Router(): Router {
   const router = Router();
 
   router.use(healthRouter);
+  // Unauthenticated, same posture as /metrics (see docs/SECURITY_AND_READINESS_REVIEW.md's
+  // still-open finding on that) — internal API documentation, not a
+  // write-capable surface on its own.
+  router.use('/docs', createDocsRouter());
   // Unauthenticated (no BankOps user concept applies to Alertmanager) but
   // guarded by its own shared secret — see alertmanager-webhook.router.ts.
   router.use('/internal/alerts', createAlertmanagerWebhookRouter());

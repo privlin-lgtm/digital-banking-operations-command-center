@@ -1,6 +1,6 @@
 import { PrismaClient, type UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { ALERT_RULE_DEFS, RUNBOOKS, SEED, SERVICES } from './config.js';
+import { ALERT_RULE_DEFS, RUNBOOKS, SEED, SERVICE_COMPLIANCE, SERVICES } from './config.js';
 import { generateIncidents } from './incidents-gen.js';
 import { generateMetricSamples } from './metrics-gen.js';
 import { generateNarrative } from './narrative.js';
@@ -87,6 +87,7 @@ async function main(): Promise<void> {
   console.log('Creating service catalog...');
   const serviceIdByKey = new Map<string, string>();
   for (const def of SERVICES) {
+    const compliance = SERVICE_COMPLIANCE[def.key];
     const service = await prisma.service.create({
       data: {
         name: def.name,
@@ -94,6 +95,8 @@ async function main(): Promise<void> {
         tier: def.tier,
         ownerTeam: def.ownerTeam,
         status: 'HEALTHY',
+        complianceScope: compliance?.complianceScope ?? [],
+        dataClassification: compliance?.dataClassification ?? 'INTERNAL',
       },
     });
     serviceIdByKey.set(def.key, service.id);

@@ -33,6 +33,19 @@ enum ServiceStatus {
   UNKNOWN
 }
 
+/// How sensitive the data a service touches is, independent of which
+/// regulatory regime applies (that's complianceScope) — a service can be
+/// RESTRICTED without being PCI-DSS scoped (e.g. the audit archive), and
+/// PCI-DSS scoped without being the most restrictive tier (many PCI
+/// controls apply well below RESTRICTED). Two axes, not one, because real
+/// compliance reviews ask both questions separately.
+enum DataClassification {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+}
+
 enum DependencyType {
   HARD
   SOFT
@@ -196,6 +209,12 @@ model Service {
   // Alert/SlaRecord relations below); archiving just hides it from the
   // active catalog while every historical FK stays intact. Null = active.
   archivedAt DateTime?
+  // Free-text regime codes ("PCI_DSS", "SOX", "GDPR"), not an enum — which
+  // regimes exist and apply to which services is a compliance-team
+  // decision made continuously, not a schema-migration event. A service
+  // can carry more than one.
+  complianceScope    String[]           @default([])
+  dataClassification DataClassification @default(INTERNAL)
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
@@ -364,6 +383,12 @@ model Incident {
   // from the full RcaReport's root-cause analysis which is written later
   // (and, for P1/P2, required before the incident can be closed).
   resolutionSummary String?
+  // Real incidents accumulate links to every other tool a response
+  // actually happens in — nullable free text, not a foreign key, because
+  // the ticket/status-page system is external and this platform has no
+  // way to validate a URL against it.
+  externalTicketUrl String?
+  statusPageUrl     String?
   // How far up the severity's escalation chain this incident has climbed,
   // and when that last happened — the state the EscalationEngine reads to
   // decide whether the *next* sweep should escalate it further.

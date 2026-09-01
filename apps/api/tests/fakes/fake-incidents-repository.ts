@@ -21,6 +21,8 @@ export function makeIncident(overrides: Partial<Incident> = {}): Incident {
     resolvedAt: overrides.resolvedAt ?? null,
     closedAt: overrides.closedAt ?? null,
     resolutionSummary: overrides.resolutionSummary ?? null,
+    externalTicketUrl: overrides.externalTicketUrl ?? null,
+    statusPageUrl: overrides.statusPageUrl ?? null,
     escalationLevel: overrides.escalationLevel ?? 0,
     lastEscalatedAt: overrides.lastEscalatedAt ?? null,
     createdAt: overrides.createdAt ?? now,
