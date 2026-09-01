@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # One PR for routine patch/minor bumps across the whole workspace
+      # instead of a dozen separate ones — a major bump (like the
+      # prisma/next upgrades CI's dependency-audit step flagged) still gets
+      # its own PR, reviewed on its own, not silently bundled in.
+      routine:
+        update-types: ['minor', 'patch']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

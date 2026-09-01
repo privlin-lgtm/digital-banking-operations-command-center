@@ -26,6 +26,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency audit
+        # Critical only, for now — `npm audit --audit-level=high` at the
+        # time this was added already fails on two known, pre-existing
+        # transitive findings (deepmerge-ts via @prisma/config's dev-only
+        # CLI tooling; postcss via next's build-time CSS pipeline). Both are
+        # real CVEs but neither processes untrusted input at runtime in
+        # this app — fixing them means a breaking prisma/next major bump,
+        # which deserves its own reviewed change, not a side effect of
+        # wiring up CI. Gating at "critical" for now still catches anything
+        # newly introduced at the severity that actually warrants blocking
+        # a merge; ratchet to "high" once those two are upgraded.
+        run: npm audit --audit-level=critical
+
       - name: Format check
         run: npm run format:check
 
