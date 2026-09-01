@@ -19,7 +19,7 @@
 const GRAFANA_URL = process.env.GRAFANA_URL ?? 'http://localhost:3001';
 const GRAFANA_USER = process.env.GRAFANA_USER ?? 'admin';
 const GRAFANA_PASSWORD = process.env.GRAFANA_PASSWORD ?? 'admin';
-const DASHBOARD_UIDS = ['bankops-api', 'bankops-fleet'];
+const DASHBOARD_UIDS = ['bankops-api', 'bankops-fleet', 'bankops-executive'];
 
 const authHeader = `Basic ${Buffer.from(`${GRAFANA_USER}:${GRAFANA_PASSWORD}`).toString('base64')}`;
 

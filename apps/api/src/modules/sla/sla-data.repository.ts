@@ -79,16 +79,25 @@ export class PrismaSlaDataSource implements SlaDataSource {
     return samples.map((sample) => sample.value);
   }
 
-  /** Only incidents with a linked alert contribute — a manually-declared incident has no detection gap to measure. */
+  /**
+   * Only incidents with a linked alert contribute — a manually-declared
+   * incident has no detection gap to measure. Windowed and measured against
+   * `openedAt`, not `createdAt`: `openedAt` is the business timestamp used
+   * everywhere else in this file (downtime, recovery), while `createdAt` is
+   * Prisma's row-insert audit timestamp — for the seeded six-month history,
+   * every row's `createdAt` is really "whenever the seed script ran," not
+   * the incident's fictional backdated date, so comparing it against a
+   * backdated `firedAt` produced gaps of literal months.
+   */
   private async gatherDetectionGaps(
     serviceId: string,
     windowStart: Date,
     windowEnd: Date,
   ): Promise<number[]> {
     const incidents = await this.prisma.incident.findMany({
-      where: { primaryServiceId: serviceId, createdAt: { gte: windowStart, lt: windowEnd } },
+      where: { primaryServiceId: serviceId, openedAt: { gte: windowStart, lt: windowEnd } },
       select: {
-        createdAt: true,
+        openedAt: true,
         alerts: { select: { firedAt: true }, orderBy: { firedAt: 'asc' }, take: 1 },
       },
     });
@@ -97,7 +106,7 @@ export class PrismaSlaDataSource implements SlaDataSource {
       .filter((incident) => incident.alerts.length > 0)
       .map(
         (incident) =>
-          (incident.createdAt.getTime() - incident.alerts[0]!.firedAt.getTime()) / 60_000,
+          (incident.openedAt.getTime() - incident.alerts[0]!.firedAt.getTime()) / 60_000,
       )
       .filter((gap) => gap >= 0);
   }

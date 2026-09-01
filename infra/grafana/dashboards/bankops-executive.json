@@ -1,0 +1,368 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "description": "Five-question executive read on platform reliability — is it healthy, are customers impacted, are there active critical incidents, are SLAs at risk, is reliability improving. Every panel except Reliability Score reads a value the platform already computes for its own operational dashboards (SlaRecord, Incident, Alert); Reliability Score is the one new composite, computed live in SQL from those same tables — see docs/architecture/adr/0009 sibling design note in the dashboard's own panel description below. No per-service filter on purpose: this is a single fleet-wide screen, not a drill-down tool — use BankOps Fleet Operations for that.",
+  "panels": [
+    {
+      "type": "row",
+      "title": "The five-question read",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 300,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "gauge",
+      "title": "Reliability Score",
+      "description": "Composite: 40% SLA compliance + 20% Tier-1 availability + 25% (100 − normalized MTTR) + 15% (100 − open-P1 penalty), all from each service's latest monthly SlaRecord plus a live open-incident count. The only calculation on this dashboard that isn't a direct read of an existing column.",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 1 },
+      "id": 301,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 65 },
+              { "color": "green", "value": 85 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "WITH latest_monthly AS (\n  SELECT DISTINCT ON (s.id) s.id AS service_id, s.tier, sla.\"actualPercent\"::float AS actual_pct,\n         sla.breached, sla.\"meanTimeToRecoverMinutes\"::float AS mttr\n  FROM services s\n  LEFT JOIN sla_records sla ON sla.\"serviceId\" = s.id AND sla.\"windowType\" = 'MONTHLY'\n  WHERE s.\"archivedAt\" IS NULL\n  ORDER BY s.id, sla.\"windowStart\" DESC\n),\nagg AS (\n  SELECT\n    100.0 * avg(CASE WHEN breached THEN 0 ELSE 1 END) AS sla_compliance_pct,\n    avg(actual_pct) FILTER (WHERE tier = 'TIER_1') AS tier1_availability_pct,\n    avg(mttr) AS avg_mttr_minutes,\n    (SELECT count(*) FROM incidents WHERE severity = 'SEV1' AND status NOT IN ('RESOLVED', 'CLOSED')) AS open_p1_count\n  FROM latest_monthly\n)\nSELECT round((\n  0.40 * coalesce(sla_compliance_pct, 100)\n  + 0.20 * coalesce(tier1_availability_pct, 100)\n  + 0.25 * greatest(0, 100 - coalesce(avg_mttr_minutes, 0) / 120 * 100)\n  + 0.15 * (100 - least(100, open_p1_count * 25))\n)::numeric, 1) AS \"Reliability Score\"\nFROM agg",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "stat",
+      "title": "Availability (Tier-1, this month)",
+      "description": "Traffic-tier-weighted: plain average of Tier-1 services' current-month actualPercent.",
+      "gridPos": { "h": 8, "w": 4, "x": 6, "y": 1 },
+      "id": 302,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 99.5 },
+              { "color": "green", "value": 99.9 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT round(avg(sla.\"actualPercent\"::float)::numeric, 3) AS \"Availability\"\nFROM sla_records sla\nJOIN services s ON s.id = sla.\"serviceId\"\nWHERE sla.\"windowType\" = 'MONTHLY' AND s.tier = 'TIER_1'\n  AND sla.\"windowStart\" = (SELECT max(\"windowStart\") FROM sla_records WHERE \"windowType\" = 'MONTHLY')",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "gauge",
+      "title": "SLA Compliance (this month)",
+      "description": "Share of services whose latest monthly SlaRecord is not breached.",
+      "gridPos": { "h": 8, "w": 4, "x": 10, "y": 1 },
+      "id": 303,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 90 },
+              { "color": "green", "value": 100 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT round(100.0 * avg(CASE WHEN breached THEN 0 ELSE 1 END), 1) AS \"SLA Compliance\"\nFROM (\n  SELECT DISTINCT ON (s.id) sla.breached\n  FROM services s\n  LEFT JOIN sla_records sla ON sla.\"serviceId\" = s.id AND sla.\"windowType\" = 'MONTHLY'\n  WHERE s.\"archivedAt\" IS NULL\n  ORDER BY s.id, sla.\"windowStart\" DESC\n) latest",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "stat",
+      "title": "Reliability trend (90d vs prior 90d)",
+      "description": "Incident volume, trailing 90 days vs. the 90 days before that. Negative is improving.",
+      "gridPos": { "h": 8, "w": 4, "x": 14, "y": 1 },
+      "id": 304,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "WITH counts AS (\n  SELECT\n    count(*) FILTER (WHERE \"openedAt\" >= now() - interval '90 days') AS recent,\n    count(*) FILTER (WHERE \"openedAt\" >= now() - interval '180 days' AND \"openedAt\" < now() - interval '90 days') AS prior\n  FROM incidents\n)\nSELECT CASE WHEN prior = 0 THEN 0 ELSE round(100.0 * (recent - prior) / prior, 1) END AS \"90d change\"\nFROM counts",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "table",
+      "title": "Active incidents (not yet resolved)",
+      "description": "Every incident whose status isn't RESOLVED or CLOSED — the answer to \"active critical incidents\" with the context an executive actually needs.",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 1 },
+      "id": 305,
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT i.severity AS \"Severity\", s.name AS \"Service\", i.title AS \"Title\", i.status AS \"Status\", i.\"openedAt\" AS \"Opened\"\nFROM incidents i JOIN services s ON s.id = i.\"primaryServiceId\"\nWHERE i.status NOT IN ('RESOLVED', 'CLOSED')\nORDER BY i.severity, i.\"openedAt\" DESC",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Supporting signal",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 310,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "table",
+      "title": "Active alerts by severity",
+      "description": "Currently-firing alerts, grouped by severity — every tier shown explicitly, including zero.",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 10 },
+      "id": 311,
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT sev AS \"Severity\", count(a.id) AS \"Firing\"\nFROM unnest(ARRAY['SEV1', 'SEV2', 'SEV3', 'SEV4']) AS sev\nLEFT JOIN alerts a ON a.severity::text = sev AND a.state = 'FIRING'\nGROUP BY sev\nORDER BY sev",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "stat",
+      "title": "MTTR (fleet-wide, this month)",
+      "description": "Average meanTimeToRecoverMinutes across every service's latest monthly SlaRecord.",
+      "gridPos": { "h": 8, "w": 4, "x": 6, "y": 10 },
+      "id": 312,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 60 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT round(avg(sla.\"meanTimeToRecoverMinutes\"::float)::numeric, 1) AS \"MTTR\"\nFROM sla_records sla\nWHERE sla.\"windowType\" = 'MONTHLY'\n  AND sla.\"windowStart\" = (SELECT max(\"windowStart\") FROM sla_records WHERE \"windowType\" = 'MONTHLY')",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "stat",
+      "title": "MTTD (fleet-wide, this month)",
+      "description": "Average meanTimeToDetectMinutes across every service's latest monthly SlaRecord.",
+      "gridPos": { "h": 8, "w": 4, "x": 10, "y": 10 },
+      "id": 313,
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 15 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT round(avg(sla.\"meanTimeToDetectMinutes\"::float)::numeric, 1) AS \"MTTD\"\nFROM sla_records sla\nWHERE sla.\"windowType\" = 'MONTHLY'\n  AND sla.\"windowStart\" = (SELECT max(\"windowStart\") FROM sla_records WHERE \"windowType\" = 'MONTHLY')",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "barchart",
+      "title": "Incident trend (monthly, by severity)",
+      "description": "Slope matters more than level — is the mix of severities getting lighter over time.",
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 10 },
+      "id": 314,
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "stacking": "normal" },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('month', i.\"openedAt\") AS time, i.severity AS metric, count(*) AS value\nFROM incidents i\nWHERE $__timeFilter(i.\"openedAt\")\nGROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ]
+    },
+
+    {
+      "type": "row",
+      "title": "Service availability",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "id": 320,
+      "panels": []
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+      "type": "table",
+      "title": "Service availability — the drill-down",
+      "description": "Current status and this month's actualPercent, every service, worst tiers first.",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 19 },
+      "id": 321,
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "This Month %" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "yellow", "value": 99 },
+                    { "color": "green", "value": 99.9 }
+                  ]
+                }
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } }
+            ]
+          }
+        ]
+      },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "bankops-postgres" },
+          "format": "table",
+          "rawSql": "SELECT s.name AS \"Service\", s.tier AS \"Tier\", s.status AS \"Status\",\n  round(coalesce(latest.\"actualPercent\"::float, 0)::numeric, 2) AS \"This Month %\"\nFROM services s\nLEFT JOIN LATERAL (\n  SELECT \"actualPercent\" FROM sla_records sla\n  WHERE sla.\"serviceId\" = s.id AND sla.\"windowType\" = 'MONTHLY'\n  ORDER BY \"windowStart\" DESC LIMIT 1\n) latest ON true\nWHERE s.\"archivedAt\" IS NULL\nORDER BY s.tier, s.name",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "1h",
+  "schemaVersion": 39,
+  "tags": ["bankops", "executive", "reliability"],
+  "time": { "from": "now-180d", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "BankOps Executive Reliability",
+  "uid": "bankops-executive",
+  "version": 1
+}
