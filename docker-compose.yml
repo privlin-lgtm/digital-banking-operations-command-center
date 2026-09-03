@@ -1,5 +1,12 @@
 name: bankops-control-center
 
+# POSTGRES_PASSWORD and GF_SECURITY_ADMIN_PASSWORD below use Compose's
+# ${VAR:?message} form, not ${VAR:-default} — a validation pass found that
+# a silent fallback to "bankops"/"admin" meant anyone who ran this stack
+# reachable from a network without setting these two env vars got a real,
+# guessable credential with no warning. `docker compose up` now refuses to
+# start at all until both are set in .env (see .env.example) — a loud
+# failure at boot instead of a quiet security hole.
 services:
   postgres:
     image: postgres:16-alpine
@@ -7,7 +14,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-bankops}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bankops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example. Refusing to fall back to a guessable default.}
       POSTGRES_DB: ${POSTGRES_DB:-bankops}
     ports:
       # Host-side port only — every other service reaches Postgres via the
@@ -43,7 +50,7 @@ services:
       - apps/api/.env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-bankops}:${POSTGRES_PASSWORD:-bankops}@postgres:5432/${POSTGRES_DB:-bankops}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bankops}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example. Refusing to fall back to a guessable default.}@postgres:5432/${POSTGRES_DB:-bankops}?schema=public
     entrypoint: ['npm', 'run', 'db:migrate', '-w', '@bankops/api']
     depends_on:
       postgres:
@@ -63,7 +70,7 @@ services:
       NODE_ENV: production
       API_HOST: 0.0.0.0
       API_PORT: 4000
-      DATABASE_URL: postgresql://${POSTGRES_USER:-bankops}:${POSTGRES_PASSWORD:-bankops}@postgres:5432/${POSTGRES_DB:-bankops}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bankops}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example. Refusing to fall back to a guessable default.}@postgres:5432/${POSTGRES_DB:-bankops}?schema=public
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       # The compose "production" profile previously never overrode the
       # .env default (false) here — the session cookie could travel over
@@ -114,7 +121,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_DB: ${POSTGRES_DB:-bankops}
       POSTGRES_USER: ${POSTGRES_USER:-bankops}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bankops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example. Refusing to fall back to a guessable default.}
       # Daily at 02:00, keep a rolling window per tier — see
       # infra/backups/README.md for the restore procedure, which has
       # actually been run end-to-end against this exact image, not just
@@ -217,14 +224,14 @@ services:
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?Set GF_SECURITY_ADMIN_PASSWORD in .env - see .env.example. Refusing to fall back to a guessable default.}
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_AUTH_ANONYMOUS_ENABLED: 'false'
       GF_SERVER_ROOT_URL: http://localhost:3001
       # Consumed via $__env{} in datasources.yml for the "BankOps Postgres" datasource.
       POSTGRES_DB: ${POSTGRES_DB:-bankops}
       POSTGRES_USER: ${POSTGRES_USER:-bankops}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bankops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env - see .env.example. Refusing to fall back to a guessable default.}
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
