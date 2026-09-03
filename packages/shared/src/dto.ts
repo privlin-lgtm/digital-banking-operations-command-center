@@ -96,6 +96,18 @@ export interface RunbookDto {
   isActive: boolean;
 }
 
+/** A runbook linked to (and possibly executed against) one incident — snapshots the runbook version it ran, since a later edit to the runbook shouldn't rewrite history. */
+export interface IncidentRunbookDto {
+  id: string;
+  incidentId: string;
+  runbookId: string;
+  runbookVersion: number;
+  outcome: RunbookOutcome;
+  executedById: string | null;
+  executedAutomatically: boolean;
+  executedAt: string;
+}
+
 export interface RcaReportDto {
   id: string;
   incidentId: string;
