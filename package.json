@@ -33,6 +33,7 @@
     "docker:up:detach": "docker compose up --build -d",
     "docker:down": "docker compose down",
     "docker:dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "capture:screenshots": "node scripts/capture-screenshots.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -42,6 +43,7 @@
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.5",
+    "playwright": "1.63.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.42.0"

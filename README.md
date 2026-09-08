@@ -4,6 +4,16 @@ An incident-management and reliability-engineering platform: severity-tiered ale
 
 **Read this first**: [`docs/architecture/adr/0003-simulated-fleet-not-real-microservices.md`](docs/architecture/adr/0003-simulated-fleet-not-real-microservices.md). There is exactly one real deployable in this system — the API below, backed by one Postgres instance. The 12-service fleet is generated seed data standing in for a fleet this platform is built to _monitor_, not services this platform _is_.
 
+## Screenshots
+
+60-second walkthrough of the main incident flow (silent): [`docs/walkthrough.mp4`](docs/walkthrough.mp4)
+
+|                                                                                                                                                                         |                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Command overview** — open incidents, firing alerts, service health, severity mix in one view <br> ![Incident command overview](docs/screenshots/incident-command.png) | **Incident triage queue** — 57 rows of real seeded history, filterable by status and severity <br> ![Incident triage queue](docs/screenshots/incident-triage-queue.png) |
+| **SLA / error-budget tracking** — actual vs. target per service, not just a green check <br> ![SLA and error-budget tracking](docs/screenshots/sla-error-budget.png)    | **Runbook catalog** — approved response procedures tied to specific trigger thresholds <br> ![Runbook catalog](docs/screenshots/runbook-catalog.png)                    |
+| **Service fleet health** — the 12-service catalog this platform exists to operate <br> ![Service fleet health](docs/screenshots/service-fleet-health.png)               | **API reference** — the full OpenAPI contract, served interactively by the running API <br> ![API reference](docs/screenshots/api-reference.png)                        |
+
 ## What's actually here
 
 | Layer          | What it is                                                                                                                                                                                                                                        |
@@ -76,13 +86,14 @@ node scripts/check-dashboards.mjs
 
 ## Everyday scripts
 
-| Command                               | Purpose                                                        |
-| ------------------------------------- | -------------------------------------------------------------- |
-| `npm run dev`                         | API + web in parallel                                          |
-| `npm run lint` / `typecheck` / `test` | Same three gates CI runs                                       |
-| `npm run db:seed:history`             | Regenerate the six-month simulated fleet history               |
-| `node scripts/check-dashboards.mjs`   | Fail loudly if any Grafana panel is silently returning no data |
-| `npm run docker:dev`                  | Full stack with hot-reload bind mounts                         |
+| Command                               | Purpose                                                                                   |
+| ------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `npm run dev`                         | API + web in parallel                                                                     |
+| `npm run lint` / `typecheck` / `test` | Same three gates CI runs                                                                  |
+| `npm run db:seed:history`             | Regenerate the six-month simulated fleet history                                          |
+| `node scripts/check-dashboards.mjs`   | Fail loudly if any Grafana panel is silently returning no data                            |
+| `npm run docker:dev`                  | Full stack with hot-reload bind mounts                                                    |
+| `npm run capture:screenshots`         | Regenerate `docs/screenshots/` and `docs/walkthrough.mp4` against a running, seeded stack |
 
 ## Known gaps
 
