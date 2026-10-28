@@ -18,6 +18,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Backfilled from 
 - `Service.complianceScope` / `Service.dataClassification` and `Incident.externalTicketUrl` / `Incident.statusPageUrl`.
 - Architecture Decision Records (`docs/architecture/adr/`), an OpenAPI contract served at `/api/v1/docs`, and this changelog.
 
+### Changed
+
+- Test tooling on vitest 5 (with vite 8, `@vitejs/plugin-react` 6, jsdom 30), which clears the two critical tinypool advisories that were failing CI's `npm audit` gate.
+- Web styling on Tailwind CSS 4 (CSS-first `@theme` in `globals.css`, `@tailwindcss/postcss`; `tailwind.config.ts` and autoprefixer removed). Rendered pages are pixel-identical to the v3 build.
+
 ### Fixed
 
 - A Prometheus label collision (`service`/`job` colliding with the scrape config's own static labels) that silently hid every per-service metric behind one flat `bankops-api` line — found twice, on two different metrics, only by actually reading Grafana's rendered legend.
