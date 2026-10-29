@@ -42,7 +42,7 @@ export function Sidebar() {
       <nav className="flex flex-1 flex-col gap-3 overflow-y-auto px-1.5 py-2">
         {SECTIONS.map((section) => (
           <div key={section.label}>
-            <p className="px-2 pb-0.5 font-mono text-3xs uppercase tracking-[0.1em] text-muted">
+            <p className="px-2 pb-0.5 font-mono text-3xs uppercase tracking-widest text-muted">
               {section.label}
             </p>
             <div className="flex flex-col">

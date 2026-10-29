@@ -1,98 +1,162 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:root {
-  color-scheme: dark;
-  --ring: #4c9be8;
+/*
+  `inline` because the Geist font variables are set on <body> by next/font,
+  not on :root where the theme variables would otherwise resolve them.
+*/
+@theme inline {
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 0.875rem;
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: 0.75rem;
+
+  --color-canvas: #0e1218;
+  --color-panel: #151b24;
+  --color-raised: #1b2330;
+  --color-ink: #c2cdd8;
+  --color-bright: #e6edf3;
+  --color-muted: #7d8b99;
+  --color-line: #243041;
+  --color-line-strong: #314155;
+
+  --color-accent: #4c9be8;
+  --color-accent-dim: #1d3f63;
+
+  --color-status-critical: #e24d4d;
+  --color-status-high: #e08b2a;
+  --color-status-medium: #c9a227;
+  --color-status-low: #4c9be8;
+  --color-status-healthy: #3aa76d;
+  --color-status-degraded: #e08b2a;
+  --color-status-unknown: #6d7b8a;
+  --color-status-info: #4c9be8;
+
+  --color-danger: #e24d4d;
+  --color-warn: #e08b2a;
 }
 
-html,
-body {
-  min-height: 100%;
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  /* v4 preflight dropped `cursor: pointer` on buttons; keep the v3 behaviour. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
-body {
-  @apply bg-canvas text-ink antialiased;
-  font-feature-settings:
-    'tnum' 1,
-    'ss01' 1;
+@utility field-label {
+  @apply mb-1 block text-3xs font-medium uppercase tracking-[0.08em] text-muted;
 }
 
-a {
-  @apply text-inherit no-underline;
+@utility field-control {
+  @apply w-full border border-line bg-canvas px-2 py-1.5 text-xs text-bright outline-hidden;
+
+  &:focus {
+    @apply border-accent;
+  }
+
+  &:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
 }
 
-::selection {
-  background: rgba(76, 155, 232, 0.22);
+@utility filter-control {
+  @apply h-6 border border-line bg-canvas px-1.5 text-2xs text-ink outline-hidden;
+
+  &:focus {
+    @apply border-accent;
+  }
 }
 
+@utility ops-btn {
+  @apply inline-flex h-6 items-center justify-center gap-1 border px-2 text-3xs font-medium uppercase tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-45;
+}
+
+@utility ops-btn-primary {
+  @apply ops-btn border-accent/50 bg-accent/10 text-accent hover:bg-accent/20;
+}
+
+@utility ops-btn-ghost {
+  @apply ops-btn border-line bg-transparent text-muted hover:bg-raised hover:text-ink;
+}
+
+@utility ops-btn-danger {
+  @apply ops-btn border-status-critical/40 bg-status-critical/10 text-status-critical hover:bg-status-critical/20;
+}
+
+@utility meta-sep {
+  @apply text-line-strong;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --ring: #4c9be8;
+  }
+
+  html,
+  body {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-feature-settings:
+      'tnum' 1,
+      'ss01' 1;
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+
+  ::selection {
+    background: rgba(76, 155, 232, 0.22);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #314155;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3d536b;
+  }
+}
+
+/*
+  Kept outside any layer, as in v3 where it came after the component
+  classes: the focus ring must win over `outline-hidden` on form controls.
+*/
 :focus-visible {
   outline: 1px solid var(--ring);
   outline-offset: 0;
-}
-
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #314155;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #3d536b;
-}
-
-@layer components {
-  .field-label {
-    @apply mb-1 block text-3xs font-medium uppercase tracking-[0.08em] text-muted;
-  }
-
-  .field-control {
-    @apply w-full border border-line bg-canvas px-2 py-1.5 text-xs text-bright outline-none;
-  }
-
-  .field-control:focus {
-    @apply border-accent;
-  }
-
-  .field-control:disabled {
-    @apply cursor-not-allowed opacity-50;
-  }
-
-  .filter-control {
-    @apply h-6 border border-line bg-canvas px-1.5 text-2xs text-ink outline-none;
-  }
-
-  .filter-control:focus {
-    @apply border-accent;
-  }
-
-  .ops-btn {
-    @apply inline-flex h-6 items-center justify-center gap-1 border px-2 text-3xs font-medium uppercase tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-45;
-  }
-
-  .ops-btn-primary {
-    @apply ops-btn border-accent/50 bg-accent/10 text-accent hover:bg-accent/20;
-  }
-
-  .ops-btn-ghost {
-    @apply ops-btn border-line bg-transparent text-muted hover:bg-raised hover:text-ink;
-  }
-
-  .ops-btn-danger {
-    @apply ops-btn border-status-critical/40 bg-status-critical/10 text-status-critical hover:bg-status-critical/20;
-  }
-
-  .meta-sep {
-    @apply text-line-strong;
-  }
 }
 
 @keyframes shimmer {
