@@ -8,6 +8,9 @@ out/
 coverage/
 *.tsbuildinfo
 
+# Written by `next dev` (Next 16 agent rules); regenerated on every run
+apps/web/AGENTS.md
+
 # Environment
 .env
 .env.local
