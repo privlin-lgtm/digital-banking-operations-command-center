@@ -5,3 +5,4 @@ coverage
 generated
 package-lock.json
 *.min.js
+next-env.d.ts
