@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import IncidentsPage from '@/app/(dashboard)/incidents/page';
 import type { IncidentRecord } from '@/lib/types';
 

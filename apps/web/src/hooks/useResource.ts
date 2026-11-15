@@ -20,6 +20,11 @@ export function useResource<T>(path: string | null): ResourceState<T> {
     setNonce((value) => value + 1);
   }, []);
 
+  // eslint-plugin-react-hooks 7 (pulled in by eslint-config-next 16) adds
+  // set-state-in-effect, which flags the synchronous resets below. They are
+  // kept as they were so the Next 16 upgrade changes no fetch behaviour;
+  // moving this hook to derived state is a separate, reviewable change.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!path) {
       setData(null);
@@ -54,6 +59,7 @@ export function useResource<T>(path: string | null): ResourceState<T> {
 
     return () => controller.abort();
   }, [path, nonce]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return { data, error, loading, reload };
 }
